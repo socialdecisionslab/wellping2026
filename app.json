@@ -64,11 +64,6 @@
     },
     "experiments": {
       "tsconfigPaths": true
-    },
-    "extra": {
-      "eas": {
-        "projectId": "76b2d2db-1171-4a8f-b9f0-29e359310452"
-      }
     }
   }
 }
