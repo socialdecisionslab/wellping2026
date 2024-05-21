@@ -8,7 +8,7 @@
       "ios",
       "android"
     ],
-    "version": "1.1.11",
+    "version": "1.1.16",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "notification": {
@@ -29,14 +29,14 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "app.wellping",
-      "buildNumber": "41",
+      "buildNumber": "46",
       "associatedDomains": [
         "applinks:wellping.github.io"
       ]
     },
     "android": {
       "package": "edu.stanford.ssnl.wellping",
-      "versionCode": 41,
+      "versionCode": 46,
       "icon": "./assets/icon.png",
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon-android-foreground.png",
