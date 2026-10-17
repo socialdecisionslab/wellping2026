@@ -79,6 +79,17 @@ function validate(config) {
     assert(!JSON.stringify(smoke).includes("gh run download"));
   }
   const aggregate = build.jobs["native-validation"];
+  const androidSmoke = config["android-smoke"].jobs["launch-and-resume"];
+  assert.equal(androidSmoke["runs-on"], "ubuntu-24.04");
+  const accessIndex = androidSmoke.steps.findIndex((step) =>
+    step.name === "Grant runner-only emulator acceleration access");
+  const preflightIndex = androidSmoke.steps.findIndex((step) =>
+    step.name === "Verify existing emulator acceleration access");
+  assert(accessIndex > 2 && preflightIndex > accessIndex);
+  assert.equal(androidSmoke.steps[accessIndex].run.trim(),
+    'if test -c /dev/kvm; then\n  sudo setfacl -m "u:$(id -un):rw" /dev/kvm\nfi');
+  assert(androidSmoke.steps[preflightIndex].run.includes('"category":"infrastructure"'));
+  assert(androidSmoke.steps[preflightIndex].run.includes("exit 1"));
   assert.equal(aggregate.if, "always()");
   assert.deepEqual([...aggregate.needs].sort(), [...gates].sort());
   assert.equal(aggregate.steps[0].env.RESULTS, "${{ toJSON(needs) }}");
@@ -92,6 +103,10 @@ function validate(config) {
 }
 validate(workflows);
 const mutations = [
+  (config) => { config["android-smoke"].jobs["launch-and-resume"]["runs-on"] = "self-hosted"; },
+  (config) => { config["android-smoke"].jobs["launch-and-resume"].steps.splice(3, 1); },
+  (config) => { config["android-smoke"].jobs["launch-and-resume"].steps[3].run = "sudo chmod 666 /dev/kvm"; },
+  (config) => { config["android-smoke"].jobs["launch-and-resume"].steps[4].run = "true"; },
   (config) => config["native-preview"].on.push.branches.pop(),
   (config) => config["native-preview"].on.pull_request.branches.shift(),
   (config) => { config["native-preview"].on.push.paths = ["src/**"]; },
@@ -150,4 +165,4 @@ try {
 } finally {
   fs.rmSync(directory, { recursive: true, force: true });
 }
-console.log("PASS: trigger coverage, same-run artifacts, SHA/run rejection, 11 configuration mutations and 17 aggregate failure cases.");
+console.log(`PASS: trigger coverage, same-run artifacts, SHA/run rejection, ${mutations.length} configuration mutations and 17 aggregate failure cases.`);

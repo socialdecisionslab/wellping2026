@@ -64,6 +64,11 @@ try {
       !sources.some((name) => name.endsWith("local/LocalApp.tsx")),
       "Production graph must not substitute the synthetic entry",
     );
+    for (const dependency of ["braces", "node-forge"])
+      assert(
+        !sources.some((name) => name.replace(/\\/g, "/").includes(`/node_modules/${dependency}/`)),
+        `${platform}: ${dependency} must not enter the shipped JavaScript graph`,
+      );
     console.log(
       `${platform}: production participant UI compiled; no application launch or backend calls.`,
     );
