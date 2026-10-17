@@ -1,3 +1,5 @@
+import { recordLocalDiagnostic } from "./localDiagnostics";
+
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
 import * as Device from "expo-device";
@@ -98,7 +100,8 @@ export const HOME_SCREEN_DEBUG_VIEW_SYMBOLS = {
 };
 
 export function logError(error: Error | unknown) {
-  // Never log arbitrary errors: they may contain credentials or response bodies.
+  // Never inspect/log arbitrary errors: they may contain credentials or responses.
+  recordLocalDiagnostic("handled_operation_failed");
 }
 
 // https://stackoverflow.com/a/49435648/2603230

@@ -276,7 +276,68 @@ function scheduleSummary(study, timeZone) {
     studyEndsAt: raw.studyInfo.endDate,
   };
 }
+// A local archive, not an authenticated/signed backup or mobile journal restore.
+function validateWorkspace(payload) {
+  if (
+    !payload ||
+    canonical(Object.keys(payload).sort()) !==
+      canonical(["draft", "exports", "history", "timeZone"])
+  )
+    fail("Unsupported workspace fields.");
+  const draft = validateStudy(payload.draft);
+  const history = validateHistory(payload.history);
+  if (
+    history.revisions.some((r) => r.study.studyInfo.id !== draft.studyInfo.id)
+  )
+    fail("Workspace contains more than one study.");
+  const responses = summarizeExports(payload.exports, draft.studyInfo.id);
+  if (typeof payload.timeZone !== "string" || !payload.timeZone.trim())
+    fail("Workspace time zone must be a named IANA zone.");
+  scheduleSummary(draft, payload.timeZone);
+  return {
+    draft,
+    history,
+    exports: responses.exports,
+    timeZone: payload.timeZone,
+  };
+}
+function createBackup(payload) {
+  const validated = validateWorkspace(payload);
+  const archive = {
+    format: "wellping-local-workspace",
+    schemaVersion: 1,
+    payload: validated,
+    sha256: digest(validated),
+  };
+  // Every offered archive must fit the actual restore request, not only its input.
+  if (
+    Buffer.byteLength(JSON.stringify({ action: "restore", archive }), "utf8") >
+    2 * 1024 * 1024
+  )
+    fail(
+      "Workspace is too large to restore through this console. Preserve original files separately.",
+    );
+  return archive;
+}
+function restoreBackup(archive) {
+  if (
+    !archive ||
+    archive.format !== "wellping-local-workspace" ||
+    archive.schemaVersion !== 1 ||
+    canonical(Object.keys(archive).sort()) !==
+      canonical(["format", "payload", "schemaVersion", "sha256"]) ||
+    archive.sha256 !== digest(archive.payload)
+  )
+    fail("Workspace integrity check failed. Nothing restored.");
+  const payload = validateWorkspace(archive.payload);
+  return {
+    ...payload,
+    responseData: summarizeExports(payload.exports, payload.draft.studyInfo.id),
+  };
+}
 module.exports = {
+  createBackup,
+  restoreBackup,
   validateStudy,
   createStudy,
   validateHistory,

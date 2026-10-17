@@ -25,6 +25,8 @@ jobs:
         run: node scripts/check-environment.cjs
       - name: Install exact dependencies
         run: corepack yarn install --immutable
+      - name: Verify clean source provenance (not release approval)
+        run: node scripts/release-manifest.cjs
       - name: Check exact-commit native workflow triggers
         run: node scripts/check-native-workflows.cjs
       - name: Lint source correctness

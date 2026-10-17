@@ -34,3 +34,7 @@ The template uses `example.invalid` and an empty upload server configuration. It
 `yarn test:researcher` builds the app's existing export/network validators and runs Node core/server tests plus synthetic DOM interaction tests. CI runs this alongside the mobile suite. The direct jsdom dev dependency pins the already-installed Jest fixture version without changing the dependency graph; it is not used in production/mobile code or the served browser page.
 
 The cloud Chromium visual attempt failed before rendering due to an unavailable process-singleton socket capability. No sandbox/security setting was bypassed. DOM tests are not a substitute for real-browser visual, keyboard and accessibility review. Production deployment and real participant data use remain unapproved and out of scope.
+
+## Workspace backup
+
+The workspace backup includes the validated draft, revision history, imported response exports and viewing timezone. Restore in an empty new tab; validation completes before any state is replaced. Clear cancels an outstanding restore. Downloads are plaintext: use approved protected storage, and retain original exports separately. Checksums detect accidental changes but do not authenticate authors or encrypt data. The console refuses to create a backup too large for its restore request limit. This is not a mobile journal or backend restore. See the Stage6 operations runbook for synthetic recovery drills and deployment gates.

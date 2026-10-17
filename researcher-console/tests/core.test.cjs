@@ -160,3 +160,85 @@ test("relative comparison answer keys must exist", () => {
   };
   assert.throws(() => core.validateStudy(study), /missing next\/branch/);
 });
+
+test("workspace backup round-trip preserves full draft/history/response coding and metadata", () => {
+  const payload = {
+    draft: fresh(),
+    history: core.addRevision(history(), fresh()),
+    exports: [exportFixture()],
+    timeZone: "America/New_York",
+  };
+  const backup = core.createBackup(payload);
+  const restored = core.restoreBackup(JSON.parse(JSON.stringify(backup)));
+  for (const key of Object.keys(payload))
+    assert.deepEqual(restored[key], payload[key]);
+  assert.equal(restored.responseData.totals.sessions, 1);
+  backup.payload.draft.streams.main.example.question = "tampered";
+  assert.throws(() => core.restoreBackup(backup), /integrity/);
+});
+test("even recomputed checksums cannot bypass workspace schema, ownership and lossless validation", () => {
+  const payload = {
+    draft: fresh(),
+    history: history(),
+    exports: [exportFixture()],
+    timeZone: "UTC",
+  };
+  for (const mutate of [
+    (p) => {
+      p.exports[0].studyId = "another_study";
+    },
+    (p) => {
+      p.exports.push(p.exports[0]);
+    },
+    (p) => {
+      p.exports[0].unrecognized = "must not disappear";
+    },
+    (p) => {
+      p.timeZone = "Not/A_Zone";
+    },
+    (p) => {
+      p.unrecognized = true;
+    },
+    (p) => {
+      const s = fresh();
+      s.studyInfo.id = "another_study";
+      p.history = core.addRevision(history(), s);
+    },
+  ]) {
+    const input = JSON.parse(JSON.stringify(payload));
+    mutate(input);
+    const archive = {
+      format: "wellping-local-workspace",
+      schemaVersion: 1,
+      payload: input,
+      sha256: core.digest(input),
+    };
+    assert.throws(() => core.restoreBackup(archive));
+  }
+});
+
+test("workspace timezone rejects coercion and generated archives always fit restore request", () => {
+  const payload = {
+    draft: fresh(),
+    history: history(),
+    exports: [],
+    timeZone: ["UTC"],
+  };
+  assert.throws(() => core.createBackup(payload));
+  payload.timeZone = "UTC";
+  const target = 2 * 1024 * 1024;
+  const base = Buffer.byteLength(JSON.stringify({ action: "backup", payload }));
+  payload.draft.streams.main.example.question += "x".repeat(target - base);
+  assert.equal(
+    Buffer.byteLength(JSON.stringify({ action: "backup", payload })),
+    target,
+  );
+  assert.throws(() => core.createBackup(payload), /too large/);
+  payload.draft.streams.main.example.question =
+    payload.draft.streams.main.example.question.slice(0, -200);
+  const archive = core.createBackup(payload);
+  assert(
+    Buffer.byteLength(JSON.stringify({ action: "restore", archive })) <= target,
+  );
+  assert.deepEqual(core.restoreBackup(archive).draft, payload.draft);
+});

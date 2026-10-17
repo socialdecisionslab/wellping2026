@@ -163,6 +163,23 @@ No imported timestamps.</pre
         files in your institution's approved storage. Backend authorization,
         role enforcement and retention policies are separate release gates.
       </footer>
+      <section aria-labelledby="backup-title">
+        <h2 id="backup-title">Local workspace backup and restore</h2>
+        <p>
+          Includes the current validated draft, revision history and imported
+          responses. Downloads are plaintext, not encrypted or authenticated.
+          Use approved protected storage. Restore only into an empty new tab;
+          original files are never changed. This does not restore a mobile
+          device or backend.
+        </p>
+        <button id="download-workspace">Download workspace backup</button>
+        <label for="workspace-file">Restore workspace into an empty tab</label>
+        <input
+          id="workspace-file"
+          type="file"
+          accept="application/json,.json"
+        />
+      </section>
     </main>
   </body>
 </html>

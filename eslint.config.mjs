@@ -8,6 +8,7 @@ export default tseslint.config(
     files: [
       "researcher-console/**/*.{js,cjs}",
       "scripts/build-research-console.cjs",
+      "scripts/release-manifest.cjs",
     ],
     extends: [js.configs.recommended],
     languageOptions: {

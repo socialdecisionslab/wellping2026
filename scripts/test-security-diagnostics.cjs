@@ -53,6 +53,7 @@ function load(file, mocks) {
       },
     },
     "./asyncStorage/asyncStorageConfig": {},
+    "./localDiagnostics": { recordLocalDiagnostic() {} },
   });
   const secret = "SYNTHETIC_SECRET_RESPONSE_CANARY";
   debug.logError(new Error(secret));

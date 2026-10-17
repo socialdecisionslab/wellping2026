@@ -181,3 +181,66 @@ test("clear fences pending imports and timestamp projections", () =>
     await projecting;
     assert.equal(el("times-output").textContent, "No imported timestamps.");
   }));
+
+test("workspace download restores atomically only into an empty tab and preserves original response codes", async () => {
+  let archive;
+  await withUI(async ({ el, downloads, importFiles }) => {
+    await el("create").onclick();
+    await el("revision").onclick();
+    await importFiles("response-files", [exportFixture()]);
+    await el("download-workspace").onclick();
+    archive = JSON.parse(downloads.at(-1).parts[0]);
+    await importFiles("workspace-file", [archive]);
+    assert.match(el("status").textContent, /empty new tab/);
+    assert.match(el("totals").textContent, /1 sessions/);
+  });
+  await withUI(async ({ el, downloads, importFiles }) => {
+    const damaged = JSON.parse(JSON.stringify(archive));
+    damaged.payload.draft.studyInfo.version = "tampered";
+    await importFiles("workspace-file", [damaged]);
+    assert.equal(el("editor").value, "");
+    assert.equal(el("sessions").children.length, 0);
+    await importFiles("workspace-file", [archive]);
+    assert.match(el("status").textContent, /Workspace restored/);
+    assert.match(el("history-summary").textContent, /1 immutable revisions/);
+    await el("download-responses").onclick();
+    assert.deepEqual(JSON.parse(downloads.at(-1).parts[0]).exports, [
+      exportFixture(),
+    ]);
+  });
+});
+test("clear cancels pending workspace restoration without partial draft/history replacement", () =>
+  withUI(async ({ w, el, importFiles }) => {
+    const core = require("../core.cjs"),
+      { fresh, history } = require("./fixtures.cjs");
+    const archive = core.createBackup({
+      draft: fresh(),
+      history: core.addRevision(history(), fresh()),
+      exports: [exportFixture()],
+      timeZone: "UTC",
+    });
+    const originalFetch = w.fetch;
+    let release, started;
+    const announced = new Promise((resolve) => {
+      started = resolve;
+    });
+    w.fetch = async (url, options) => {
+      if (JSON.parse(options.body).action === "restore") {
+        started();
+        await new Promise((resolve) => {
+          release = resolve;
+        });
+      }
+      return originalFetch(url, options);
+    };
+    const restoring = importFiles("workspace-file", [archive]);
+    await announced;
+    assert.equal(el("editor").disabled, true);
+    el("clear-responses").onclick();
+    release();
+    await restoring;
+    assert.equal(el("editor").value, "");
+    assert.equal(el("revisions").children.length, 1);
+    assert.equal(el("revisions").children[0].value, "");
+    assert.equal(el("sessions").children.length, 0);
+  }));

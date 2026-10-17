@@ -16,9 +16,10 @@
     "prebuild:local": "WELLPING_LOCAL_ONLY=1 expo prebuild",
     "android:local": "WELLPING_LOCAL_ONLY=1 expo run:android",
     "ios:local": "WELLPING_LOCAL_ONLY=1 expo run:ios",
-    "lint": "eslint \"src/**/*.{ts,tsx}\" \"local/**/*.{ts,tsx}\" \"config/**/*.{ts,tsx}\" App.tsx \"researcher-console/**/*.{js,cjs}\" scripts/build-research-console.cjs",
+    "lint": "eslint \"src/**/*.{ts,tsx}\" \"local/**/*.{ts,tsx}\" \"config/**/*.{ts,tsx}\" App.tsx \"researcher-console/**/*.{js,cjs}\" scripts/build-research-console.cjs scripts/release-manifest.cjs",
     "researcher:local": "node scripts/build-research-console.cjs && node researcher-console/server.cjs",
-    "test:researcher": "node scripts/build-research-console.cjs && node --test researcher-console/tests/*.test.cjs"
+    "test:researcher": "node scripts/build-research-console.cjs && node --test researcher-console/tests/*.test.cjs",
+    "release:manifest": "node scripts/release-manifest.cjs"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.2.0",

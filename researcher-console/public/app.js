@@ -315,4 +315,54 @@
       "Absolute timestamps projected; original timezone offsets and source exports unchanged.",
     );
   });
+  byId("download-workspace").onclick = run(async () => {
+    const generation = responseGeneration;
+    const archive = await api({
+      action: "backup",
+      payload: {
+        draft: readEditor(),
+        history,
+        exports: responseData?.exports || [],
+        timeZone: byId("zone").value,
+      },
+    });
+    if (generation !== responseGeneration) return;
+    download("wellping-local-workspace.json", archive);
+    status(
+      "Plaintext workspace backup prepared. Store in approved protected storage; checksum is not authentication or encryption.",
+    );
+  });
+  byId("workspace-file").onchange = run(async () => {
+    if (
+      byId("editor").value.trim() ||
+      history.revisions.length ||
+      responseData
+    ) {
+      status(
+        "Restore requires an empty new tab. Current draft, history and responses were preserved.",
+        true,
+      );
+      return;
+    }
+    const file = byId("workspace-file").files[0];
+    if (!file) return;
+    const generation = responseGeneration;
+    const restored = await api({
+      action: "restore",
+      archive: JSON.parse(await file.text()),
+    });
+    if (generation !== responseGeneration) return;
+    // All validation completed before any in-memory workspace state changes.
+    history = restored.history;
+    responseData = restored.exports.length ? restored.responseData : null;
+    showStudy(restored.draft);
+    byId("zone").value = restored.timeZone;
+    byId("schedule-output").textContent = "";
+    byId("times-output").textContent = "No imported timestamps.";
+    renderHistory();
+    renderResponses();
+    status(
+      "Workspace restored after checksum, schema, study and session validation. This is not a mobile/backend restore or proof of archive authorship.",
+    );
+  });
 })();

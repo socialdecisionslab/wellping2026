@@ -61,6 +61,12 @@ function createServer() {
       const body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
       let result;
       switch (body.action) {
+        case "backup":
+          result = core.createBackup(body.payload);
+          break;
+        case "restore":
+          result = core.restoreBackup(body.archive);
+          break;
         case "create":
           result = core.createStudy(body.input);
           break;
