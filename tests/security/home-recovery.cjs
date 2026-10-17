@@ -79,6 +79,8 @@ function load(file) {
   const code = ts.transpileModule(fs.readFileSync(file, "utf8"), {
     compilerOptions: {
       module: ts.ModuleKind.CommonJS,
+      // VM mocks explicitly expose default exports; keep this contract across TS versions.
+      esModuleInterop: false,
       jsx: ts.JsxEmit.React,
       target: ts.ScriptTarget.ES2020,
     },

@@ -2,20 +2,21 @@ name: iPhone simulator smoke test
 on:
   workflow_dispatch:
   push:
-    branches: [codex/modernize-mobile-runtime]
+    branches:
+      [codex/modernize-mobile-runtime, modernization/mobile-foundation-pr7]
     paths:
-      - '.github/workflows/native-preview.yml'
-      - 'app.config.js'
-      - 'app.json'
-      - 'package.json'
-      - 'yarn.lock'
-      - 'local/**'
-      - 'src/**'
-      - 'scripts/native/**'
-      - '.github/workflows/simulator-smoke.yml'
-      - 'scripts/smoke-ios.sh'
-      - 'scripts/check-ios-screen.swift'
-      - 'scripts/simulator.entitlements'
+      - ".github/workflows/native-preview.yml"
+      - "app.config.js"
+      - "app.json"
+      - "package.json"
+      - "yarn.lock"
+      - "local/**"
+      - "src/**"
+      - "scripts/native/**"
+      - ".github/workflows/simulator-smoke.yml"
+      - "scripts/smoke-ios.sh"
+      - "scripts/check-ios-screen.swift"
+      - "scripts/simulator.entitlements"
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -30,12 +31,20 @@ jobs:
       DEVELOPER_DIR: /Applications/Xcode_26.4.1.app/Contents/Developer
       GH_TOKEN: ${{ github.token }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
       - name: Download the latest native test build from this branch
         shell: bash
         run: |
-          WP_RUN=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/native-preview.yml/runs?branch=$GITHUB_REF_NAME&per_page=1" --jq '.workflow_runs[0].id')
-          test "$WP_RUN" != null
+          WP_RUN=""
+          for WP_ATTEMPT in {1..20}; do
+            WP_RUN=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/native-preview.yml/runs?branch=$GITHUB_REF_NAME&per_page=20" --jq '.workflow_runs | map(select(.head_sha == env.GITHUB_SHA)) | .[0].id // empty')
+            if [ -n "$WP_RUN" ]; then break; fi
+            sleep 15
+          done
+          test -n "$WP_RUN"
+          test "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$WP_RUN" --jq '.head_sha')" = "$GITHUB_SHA"
           WP_STATUS=""
           for WP_ATTEMPT in {1..120}; do
             WP_STATUS=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$WP_RUN/jobs" --jq '.jobs[] | select(.name == "ios-simulator") | .conclusion')

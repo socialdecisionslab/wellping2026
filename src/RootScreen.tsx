@@ -228,7 +228,7 @@ export default class RootScreen extends React.Component<
         logoutError: false,
       });
     } catch (error) {
-      let recoveryError = false;
+      let recoveryError: boolean;
       try {
         recoveryError = (await getVerifiedPendingLogoutAsync()) !== null;
       } catch {

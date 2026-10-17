@@ -123,15 +123,9 @@ export async function firebaseLoginAsync(
  * check for `isUsingFirebase(studyInfo)` for this function.
  */
 export async function firebaseLogoutAndDeleteAppAsync(): Promise<void> {
-  try {
-    const auth = getFirebaseAuth();
-    if (auth.currentUser !== null) {
-      await firebaseSignOut(auth);
-    }
-    await deleteFirebaseAppAsync();
-  } catch (error) {
-    throw error;
-  }
+  const auth = getFirebaseAuth();
+  if (auth.currentUser !== null) await firebaseSignOut(auth);
+  await deleteFirebaseAppAsync();
 }
 
 /** Compare actual SDK configuration, not just the selected study's label. */
@@ -149,7 +143,7 @@ function assertFirebaseConfig(app: FirebaseApp, studyInfo: StudyInfo): void {
 }
 
 function assertPathComponent(value: string): void {
-  if (!value || /[.#$\[\]\/\u0000-\u001f\u007f]/.test(value)) {
+  if (!value || /[.#$[\]/\u0000-\u001f\u007f]/.test(value)) {
     throw new Error("Invalid upload session.");
   }
 }

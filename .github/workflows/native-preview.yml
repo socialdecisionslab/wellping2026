@@ -2,39 +2,42 @@ name: Native test builds
 on:
   workflow_dispatch:
   push:
-    branches: [codex/modernize-mobile-runtime]
+    branches:
+      [codex/modernize-mobile-runtime, modernization/mobile-foundation-pr7]
     paths:
-      - '.github/workflows/native-preview.yml'
-      - 'scripts/native/**'
-      - 'scripts/simulator.entitlements'
-      - 'app.config.js'
-      - 'app.json'
-      - 'package.json'
-      - 'yarn.lock'
-      - 'local/**'
-      - 'src/**'
+      - ".github/workflows/native-preview.yml"
+      - "scripts/native/**"
+      - "scripts/simulator.entitlements"
+      - "app.config.js"
+      - "app.json"
+      - "package.json"
+      - "yarn.lock"
+      - "local/**"
+      - "src/**"
 permissions:
   contents: read
 concurrency:
   group: native-preview-${{ github.ref }}
   cancel-in-progress: true
 env:
-  WELLPING_LOCAL_ONLY: '1'
-  EXPO_NO_TELEMETRY: '1'
-  CI: '1'
+  WELLPING_LOCAL_ONLY: "1"
+  EXPO_NO_TELEMETRY: "1"
+  CI: "1"
 jobs:
   android:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: "17"
       - run: corepack yarn install --immutable
       - name: Generate isolated Android project
         run: corepack yarn expo prebuild --platform android --no-install
@@ -59,7 +62,9 @@ jobs:
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.4.1.app/Contents/Developer
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc

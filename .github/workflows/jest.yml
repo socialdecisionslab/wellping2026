@@ -25,6 +25,8 @@ jobs:
         run: node scripts/check-environment.cjs
       - name: Install exact dependencies
         run: corepack yarn install --immutable
+      - name: Lint source correctness
+        run: corepack yarn lint
       - name: Type-check and test with synthetic data
         run: corepack yarn test:ci
       - name: Compile isolated iOS and Android bundles

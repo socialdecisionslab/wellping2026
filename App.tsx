@@ -12,11 +12,10 @@ import RootScreen from "./src/RootScreen";
 export default function App() {
   return (
     <SafeAreaProvider>
-    <SafeAreaView style={{ flex: 1 }}>
-      <RootScreen />
-      {/* eslint-disable-next-line react/style-prop-object */}
-      <StatusBar style="dark" />
-    </SafeAreaView>
+      <SafeAreaView style={{ flex: 1 }}>
+        <RootScreen />
+        <StatusBar style="dark" />
+      </SafeAreaView>
     </SafeAreaProvider>
   );
 }

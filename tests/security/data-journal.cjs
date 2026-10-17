@@ -121,6 +121,8 @@ function fixture(seed) {
         ts.transpileModule(fs.readFileSync(full, "utf8"), {
           compilerOptions: {
             module: ts.ModuleKind.CommonJS,
+            // VM mocks explicitly expose default exports; keep this contract across TS versions.
+            esModuleInterop: false,
             target: ts.ScriptTarget.ES2020,
           },
         }).outputText,
