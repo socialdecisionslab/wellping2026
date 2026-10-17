@@ -2,7 +2,7 @@ import "./src/helpers/global";
 
 import { StatusBar } from "expo-status-bar";
 import React from "react";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 
 import RootScreen from "./src/RootScreen";
 
@@ -11,10 +11,12 @@ import RootScreen from "./src/RootScreen";
 
 export default function App() {
   return (
-    <SafeAreaView>
+    <SafeAreaProvider>
+    <SafeAreaView style={{ flex: 1 }}>
       <RootScreen />
       {/* eslint-disable-next-line react/style-prop-object */}
       <StatusBar style="dark" />
     </SafeAreaView>
+    </SafeAreaProvider>
   );
 }

@@ -153,6 +153,7 @@ export const notificationsTest = () => {
           expect(
             spyScheduleNotificationAsync.mock.calls[i]?.[0].trigger,
           ).toStrictEqual({
+            type: Notifications.SchedulableTriggerInputTypes.DATE,
             date: notificationTimes[i].notificationDate,
             channelId: ANDROID_CHANNEL_NAME,
           });
@@ -176,6 +177,7 @@ export const notificationsTest = () => {
           expect(
             spyScheduleNotificationAsync.mock.calls[i - 3][0]?.trigger,
           ).toStrictEqual({
+            type: Notifications.SchedulableTriggerInputTypes.DATE,
             date: notificationTimes[i].notificationDate,
             channelId: ANDROID_CHANNEL_NAME,
           });

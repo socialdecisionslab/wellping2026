@@ -107,7 +107,7 @@ const MultipleTextQuestionScreen: React.ElementType<
     [index: number]: boolean;
   }>(Array(numberOfTextFields).fill(true));
 
-  const textFields: SearchableDropdown[] = [];
+  const textFields: React.ReactElement[] = [];
   // https://stackoverflow.com/a/56063129/2603230
   const textFieldsRef = React.useRef<(TextInput | null)[]>([]);
   for (let index = 0; index < numberOfTextFields; index++) {

@@ -4,7 +4,7 @@ import {
   waitFor,
   waitForElementToBeRemoved,
   RenderAPI,
-} from "react-native-testing-library";
+} from "@testing-library/react-native";
 import waitForExpect from "wait-for-expect";
 
 import { getAnswersAsync } from "../../helpers/answers";
@@ -150,7 +150,7 @@ export async function tearDownSurveyScreenTestAsync(
  */
 export async function testCurrentQuestionAsync({
   renderResults: {
-    getByA11yLabel,
+    getByLabelText,
     queryByTestId,
     findByTestId,
     getByTestId,
@@ -197,9 +197,9 @@ export async function testCurrentQuestionAsync({
   const currentQuestionTitle = getCurrentQuestionTitle();
 
   if (nextButton === "next") {
-    fireEvent.press(getByA11yLabel(NEXT_BUTTON_A11YLABEL));
+    fireEvent.press(getByLabelText(NEXT_BUTTON_A11YLABEL));
   } else if (nextButton === "pna") {
-    fireEvent.press(getByA11yLabel(PNA_BUTTON_A11YLABEL));
+    fireEvent.press(getByLabelText(PNA_BUTTON_A11YLABEL));
   }
 
   if (waitForAndTestEndPage) {

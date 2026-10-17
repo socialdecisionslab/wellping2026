@@ -75,7 +75,9 @@ export default class LoginScreen extends React.Component<
         url.queryParams &&
         url.queryParams["code"]
       ) {
-        const loginCode = decodeURIComponent(url.queryParams["code"]);
+        const code = url.queryParams["code"];
+        if (typeof code !== "string") return;
+        const loginCode = decodeURIComponent(code);
 
         this.setState({ formData: loginCode });
         Alert.alert(
@@ -97,6 +99,8 @@ export default class LoginScreen extends React.Component<
     this.handleUrl(Linking.parse(event.url));
   };
 
+  linkingSubscription: ReturnType<typeof Linking.addEventListener> | null = null;
+
   async componentDidMount() {
     // If LoginScreen is loaded, it means that the user haven't logged in yet.
     // So we can parse initial url and addEventListener.
@@ -106,11 +110,11 @@ export default class LoginScreen extends React.Component<
       this.handleUrl(await Linking.parseInitialURLAsync());
       firstTimeLoadingLoginScreen = false;
     }
-    Linking.addEventListener("url", this.listenToUrlWhenForegroundHandler);
+    this.linkingSubscription = Linking.addEventListener("url", this.listenToUrlWhenForegroundHandler);
   }
 
   componentWillUnmount() {
-    Linking.removeEventListener("url", this.listenToUrlWhenForegroundHandler);
+    this.linkingSubscription?.remove();
   }
 
   async confirmAgeAsync(): Promise<boolean> {
@@ -304,7 +308,7 @@ export default class LoginScreen extends React.Component<
           value={this.state.formData}
           autoCorrect={false}
           autoCapitalize="none"
-          autoCompleteType="off"
+          autoComplete="off"
           placeholder="Paste your login code here…"
           multiline
           textAlignVertical="top" // https://reactnative.dev/docs/textinput#multiline

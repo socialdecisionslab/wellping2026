@@ -4,7 +4,7 @@ import {
   fireEvent,
   waitFor,
   RenderAPI,
-} from "react-native-testing-library";
+} from "@testing-library/react-native";
 
 import SurveyScreen, { SurveyScreenProps } from "../../SurveyScreen";
 import { QuestionType } from "../../helpers/helpers";
@@ -32,10 +32,10 @@ afterEach(async () => {
 
 async function clickOptionAsync(
   yesNo: "Yes" | "No",
-  { findByA11yLabel }: RenderAPI,
+  { findByLabelText }: RenderAPI,
 ) {
   // `findBy` does the `waitFor` for us.
-  fireEvent.press(await findByA11yLabel(`select ${yesNo}`));
+  fireEvent.press(await findByLabelText(`select ${yesNo}`));
 }
 
 describe("with both branchStartId", () => {

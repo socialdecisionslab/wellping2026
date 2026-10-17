@@ -6,7 +6,7 @@ module.exports = ({ config }) => {
     name: "Well Ping Local",
     slug: "wellping-local",
     owner: undefined,
-    entryPoint: "./local/index.js",
+    scheme: "wellping-local",
     updates: { ...config.updates, enabled: false },
     extra: { ...config.extra, wellpingLocalOnly: true },
     ios: {

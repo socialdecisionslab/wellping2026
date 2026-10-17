@@ -32,6 +32,7 @@ import {
   Alert,
   Button,
   Dimensions,
+  DimensionValue,
   Image,
   Platform,
   ScrollView,
@@ -839,8 +840,8 @@ export default class SurveyScreen extends React.Component<
           style={{
             margin: 5,
             alignSelf: "center",
-            width: question.image.style.width,
-            height: question.image.style.height,
+            width: question.image.style.width as DimensionValue,
+            height: question.image.style.height as DimensionValue,
             maxHeight: question.image.style.maxHeight,
             maxWidth: question.image.style.maxWidth,
             aspectRatio: question.image.style.aspectRatio,

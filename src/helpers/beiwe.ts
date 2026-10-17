@@ -76,7 +76,7 @@ export async function beiweUploadDataForUserAsync(
     endUploading();
     return response as DataUploadServerResponse;
   } catch (e) {
-    endUploading(`BW: ${e.message}`);
+    endUploading("BW: upload failed");
     throw e;
   }
 }

@@ -13,7 +13,7 @@ import {
   fireEvent,
   waitFor,
   RenderAPI,
-} from "react-native-testing-library";
+} from "@testing-library/react-native";
 
 import SurveyScreen, { SurveyScreenProps } from "../../SurveyScreen";
 import { QuestionType } from "../../helpers/helpers";
@@ -43,10 +43,10 @@ afterEach(async () => {
 
 async function clickOptionAsync(
   option: string,
-  { findByA11yLabel }: RenderAPI,
+  { findByLabelText }: RenderAPI,
 ) {
   // `findBy` does the `waitFor` for us.
-  fireEvent.press(await findByA11yLabel(`select ${option}`));
+  fireEvent.press(await findByLabelText(`select ${option}`));
 }
 
 const TWO_TYPES: ("ChoicesWithSingleAnswer" | "ChoicesWithMultipleAnswers")[] =

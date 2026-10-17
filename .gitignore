@@ -70,3 +70,8 @@ coverage/**/*
 !.yarn/releases
 !.yarn/sdks
 !.yarn/versions
+
+# Generated native projects (Expo config is the source of truth).
+/ios/
+/android/
+/dist/

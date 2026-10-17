@@ -6,14 +6,11 @@
       "dom",
       "esnext"
     ],
-    "moduleResolution": "node",
     "noEmit": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,
     "strict": true,
     "strictNullChecks": true,
-    "emitDecoratorMetadata": true,
-    "experimentalDecorators": true,
     "strictPropertyInitialization": false
   },
   "extends": "expo/tsconfig.base"

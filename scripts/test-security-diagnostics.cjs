@@ -36,6 +36,7 @@ function load(file, mocks) {
     "@react-native-async-storage/async-storage": {},
     "expo-constants": { default: {} },
     "expo-device": {},
+    "expo-application": {},
     "react-native-uuid": {},
     "react-native": {
       Share: {

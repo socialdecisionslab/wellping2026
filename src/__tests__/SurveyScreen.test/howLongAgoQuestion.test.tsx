@@ -1,5 +1,5 @@
 import React from "react";
-import { render, fireEvent, RenderAPI } from "react-native-testing-library";
+import { render, fireEvent, RenderAPI } from "@testing-library/react-native";
 
 import SurveyScreen, { SurveyScreenProps } from "../../SurveyScreen";
 import { QuestionType } from "../../helpers/helpers";
@@ -41,10 +41,10 @@ afterEach(async () => {
 
 async function pressSelectionAsync(
   name: string,
-  { findByA11yLabel }: RenderAPI,
+  { findByLabelText }: RenderAPI,
 ) {
   // `findBy` does the `waitFor` for us.
-  fireEvent.press(await findByA11yLabel(`select ${name}`));
+  fireEvent.press(await findByLabelText(`select ${name}`));
 }
 
 test("click both columns", async () => {

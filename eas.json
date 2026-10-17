@@ -1,25 +1,16 @@
 {
-  "cli": {
-    "version": ">= 0.41.0"
-  },
+  "cli": { "version": ">= 16.0.0" },
   "build": {
     "development": {
-      "releaseChannel": "staging",
       "developmentClient": true,
-      "distribution": "internal"
+      "distribution": "internal",
+      "env": { "WELLPING_LOCAL_ONLY": "1" }
     },
-    "production": {
-      "releaseChannel": "prod-v1-1-2",
-      "env": {
-        "YARN_ENABLE_IMMUTABLE_INSTALLS": "false"
-      }
-    }
-  },
-  "submit": {
-    "production": {
-      "ios": {
-        "ascAppId": "1532364388"
-      }
+    "preview": {
+      "distribution": "internal",
+      "env": { "WELLPING_LOCAL_ONLY": "1" },
+      "android": { "buildType": "apk" },
+      "ios": { "simulator": true }
     }
   }
 }

@@ -1,6 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
 import * as Device from "expo-device";
+import * as Application from "expo-application";
 import { Share, Alert, AlertButton } from "react-native";
 import uuid from "react-native-uuid";
 
@@ -13,8 +14,8 @@ import { ASYNC_STORAGE_WELLPING_PREFIX } from "./asyncStorage/asyncStorageConfig
 // We use "js." prefix instead of "v." prefix so that it will be not confused
 // with the native version name.
 export const JS_VERSION_NUMBER = "js.3.5.27.1";
-export const NATIVE_VERSION_NUMBER = Constants.nativeAppVersion;
-export const NATIVE_BUILD_NUMBER = Constants.nativeBuildVersion;
+export const NATIVE_VERSION_NUMBER = Application.nativeApplicationVersion;
+export const NATIVE_BUILD_NUMBER = Application.nativeBuildVersion;
 export const EXPO_VERSION = Constants.expoVersion;
 
 /**

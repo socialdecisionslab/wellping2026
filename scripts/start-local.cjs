@@ -6,7 +6,7 @@ const path = require("path");
 const child = spawn(
   process.execPath,
   [
-    require.resolve("expo-cli/bin/expo.js"),
+    require.resolve("expo/bin/cli"),
     "start",
     "--offline",
     "--localhost",
@@ -23,11 +23,9 @@ const child = spawn(
       EXPO_OFFLINE: "1",
       EXPO_NO_TELEMETRY: "1",
       EXPO_NO_DOCTOR: "1",
+      EXPO_NO_DEPENDENCY_VALIDATION: "1",
       EXPO_NO_INTERACTIVE: "1",
-      __UNSAFE_EXPO_HOME_DIRECTORY: path.resolve(
-        __dirname,
-        "../.expo/local-cli",
-      ),
+      EXPO_HOME: path.resolve(__dirname, "../.expo/local-cli"),
     },
   },
 );

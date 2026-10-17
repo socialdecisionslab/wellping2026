@@ -6,7 +6,6 @@ import {
 } from "@wellping/study-schemas/lib/types";
 import { format, getDay } from "date-fns";
 import * as Linking from "expo-linking";
-import { Subscription } from "expo-modules-core";
 import * as Notifications from "expo-notifications";
 import {
   onAuthStateChanged as firebaseOnAuthStateChanged,
@@ -149,7 +148,8 @@ export default class HomeScreen extends React.Component<
     this.setState({ appState: nextAppState });
   };
 
-  notificationResponseReceivedListener: Subscription | null = null;
+  notificationResponseReceivedListener: ReturnType<typeof Notifications.addNotificationResponseReceivedListener> | null = null;
+  appStateSubscription: ReturnType<typeof AppState.addEventListener> | null = null;
   unregisterAuthObserver: FirebaseUnsubscribe | null = null;
   async restorePingAsync(ping: Ping) {
     try {
@@ -188,7 +188,7 @@ export default class HomeScreen extends React.Component<
         await this.checkIfPingHasExpiredAsync();
       });
 
-    AppState.addEventListener("change", this._handleAppStateChange);
+    this.appStateSubscription = AppState.addEventListener("change", this._handleAppStateChange);
 
     const latestPing = await getLatestPingAsync();
     //console.warn(latestStartedPing);
@@ -273,7 +273,7 @@ export default class HomeScreen extends React.Component<
   componentWillUnmount() {
     clearInterval(this.interval);
 
-    AppState.removeEventListener("change", this._handleAppStateChange);
+    this.appStateSubscription?.remove();
 
     if (this.unregisterAuthObserver) {
       this.unregisterAuthObserver();

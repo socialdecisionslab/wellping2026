@@ -1,9 +1,8 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import "@testing-library/jest-native/extend-expect";
 import * as Notifications from "expo-notifications";
 import * as SecureStore from "expo-secure-store";
 import React from "react";
-import { fireEvent, render, waitFor } from "react-native-testing-library";
+import { fireEvent, render, waitFor } from "@testing-library/react-native";
 
 import LocalApp from "../../local/LocalApp";
 import { openSyntheticSession } from "../../local/session";
@@ -71,16 +70,16 @@ test("can reopen a new synthetic session before its screen has mounted", async (
 });
 
 test("completes the real survey renderer locally and reopens saved completion", async () => {
-  let screen = render(<LocalApp />);
-  const blue = await screen.findByA11yLabel("select Blue");
+  let screen = render(<LocalApp initialQuestionnaire="quick" />);
+  const blue = await screen.findByLabelText("select Blue");
   fireEvent.press(blue);
   await waitFor(() =>
-    expect(screen.getByA11yLabel("Next question")).not.toBeDisabled(),
+    expect(screen.getByLabelText("Next question")).not.toBeDisabled(),
   );
-  fireEvent.press(screen.getByA11yLabel("Next question"));
+  fireEvent.press(screen.getByLabelText("Next question"));
   await screen.findByText("Local test: move the slider, then finish.");
   fireEvent.press(
-    screen.getByA11yLabel("Prefer not to answer the current question"),
+    screen.getByLabelText("Prefer not to answer the current question"),
   );
   await screen.findByText("Saved on this test device. No data uploaded.");
   const answers = await getAnswersAsync();
@@ -89,7 +88,7 @@ test("completes the real survey renderer locally and reopens saved completion", 
   expect(answers[1].preferNotToAnswer).toBe(true);
   screen.unmount();
 
-  screen = render(<LocalApp />);
+  screen = render(<LocalApp initialQuestionnaire="quick" />);
   await screen.findByText("Saved on this test device. No data uploaded.");
   expect(await getAnswersAsync()).toEqual(answers);
   fireEvent.press(screen.getByText("Start another test survey"));
@@ -100,12 +99,12 @@ test("completes the real survey renderer locally and reopens saved completion", 
 });
 
 test("resumes an unfinished survey from its saved question", async () => {
-  let screen = render(<LocalApp />);
-  fireEvent.press(await screen.findByA11yLabel("select Green"));
+  let screen = render(<LocalApp initialQuestionnaire="quick" />);
+  fireEvent.press(await screen.findByLabelText("select Green"));
   await waitFor(() =>
-    expect(screen.getByA11yLabel("Next question")).not.toBeDisabled(),
+    expect(screen.getByLabelText("Next question")).not.toBeDisabled(),
   );
-  fireEvent.press(screen.getByA11yLabel("Next question"));
+  fireEvent.press(screen.getByLabelText("Next question"));
   await screen.findByText("Local test: move the slider, then finish.");
   // Wait for the existing survey's asynchronous progress persistence.
   await waitFor(async () =>
@@ -116,8 +115,33 @@ test("resumes an unfinished survey from its saved question", async () => {
     ).toBe("rating"),
   );
   screen.unmount();
-  screen = render(<LocalApp />);
+  screen = render(<LocalApp initialQuestionnaire="quick" />);
   await screen.findByText("Local test: move the slider, then finish.");
   expect((await getAnswersAsync())[0].data).toEqual({ value: "Green" });
   screen.unmount();
+});
+
+test("existing questionnaire preserves questions and resumes separately from the quick test", async () => {
+  const original = require("../../local/debug/DEBUG_STUDY.json");
+  const { getLocalFixture } = require("../../local/fixtures");
+  const fixture = getLocalFixture("existing");
+  expect(fixture.streams.myStream).toEqual(original.streams.myStream);
+  expect(Object.keys(fixture.streams.myStream)).toHaveLength(16);
+  expect(fixture.studyInfo.server).toEqual({});
+  expect(fixture.studyInfo.dashboardURL).toBeUndefined();
+  expect(fixture.studyInfo.consentFormUrl).toBe(
+    "https://example.invalid/consent",
+  );
+  const existing = await openSyntheticSession(false, "existing");
+  expect(existing.streamName).toBe("myStream");
+  const quick = await openSyntheticSession(false, "quick");
+  expect(quick.streamName).toBe("synthetic");
+  const reopened = await openSyntheticSession(false, "existing");
+  expect(reopened.ping.id).toBe(existing.ping.id);
+  expect(reopened.previousState?.currentQuestionData.questionId).toBe(
+    "SocInteraction_Names",
+  );
+  const screen = render(<LocalApp />);
+  await screen.findByLabelText("Prefer not to answer the current question");
+  expect(screen.getByText("Switch to quick test")).toBeTruthy();
 });
