@@ -23,6 +23,7 @@ let resumeReads = 0,
   uploadFails = false,
   logoutFails = true,
   alert;
+let drain = async () => {};
 const state = {
   currentQuestionData: { questionId: "synthetic" },
   nextQuestionsDataStack: [],
@@ -44,6 +45,7 @@ function load(file) {
       },
     },
     "./helpers/asyncStorage/pingState": {
+      MissingResumeStateError: class extends Error {},
       async getPingStateAsync() {
         resumeReads++;
         if (resumeFails) throw Error("SYNTHETIC_SECRET");
@@ -54,10 +56,18 @@ function load(file) {
       HOME_SCREEN_DEBUG_VIEW_SYMBOLS: { UPLOAD: { INITIAL: "" } },
     },
     "./helpers/styles": { styles: {} },
+    "./helpers/surveyAnswerWrites": {
+      waitForPendingSurveySavesAsync: () => drain(),
+    },
     "./helpers/dataUpload": {
       async uploadDataAsync() {
         if (uploadFails) throw Error("SYNTHETIC_SECRET");
         return { private: "SYNTHETIC_SECRET" };
+      },
+    },
+    "./helpers/dataJournal": {
+      async getVerifiedPendingLogoutAsync() {
+        return null;
       },
     },
     "./helpers/users": {
@@ -106,6 +116,44 @@ function load(file) {
   await home._forceUploadAllDataAsync();
   assert.equal(alert[0], "Upload failed");
   assert(!JSON.stringify(alert).includes("SYNTHETIC_SECRET"));
+  let release;
+  drain = () =>
+    new Promise((resolve) => {
+      release = resolve;
+    });
+  const preserving = home.preserveExpiredSurveyAsync();
+  assert(home.state.expirySavePending);
+  assert(JSON.stringify(home.render()).includes("keep the app open"));
+  await Promise.resolve();
+  release();
+  await preserving;
+  assert.equal(home.state.currentPing, null);
+  assert(home.state.expiredIncomplete);
+  drain = async () => {
+    throw Error("SYNTHETIC_SECRET");
+  };
+  await home.preserveExpiredSurveyAsync();
+  assert(home.state.expirySaveError);
+  assert(JSON.stringify(home.render()).includes("could not be saved yet"));
+  assert(!JSON.stringify(home.render()).includes("SYNTHETIC_SECRET"));
+  drain = async () => {};
+  await home.preserveExpiredSurveyAsync();
+  assert.equal(home.state.expirySaveError, false);
+  const activePing = { id: "still-active", endTime: null };
+  home.setState({ currentPing: activePing, expiredIncomplete: false });
+  drain = async () => {
+    throw Error("SYNTHETIC_SECRET");
+  };
+  await home._uploadUnuploadedDataAndRemoveFromThemIfSuccessfulAsync();
+  assert(home.state.expirySaveError);
+  drain = async () => {};
+  await home.retryPendingSurveySavesAsync();
+  assert.equal(
+    home.state.currentPing,
+    activePing,
+    "generic save retry must not expire an active survey",
+  );
+  assert.equal(home.state.expiredIncomplete, false);
   const Root = load("src/RootScreen.tsx");
   const root = new Root({});
   root.setState({

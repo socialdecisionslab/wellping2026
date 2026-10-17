@@ -63,6 +63,7 @@ const YESNO_CHOICES: Choice[] = [
 
 const ChoicesQuestionScreen: React.ElementType<ChoicesQuestionScreenProps> = ({
   question,
+  initialAnswer,
   loadingCompleted,
   onDataChange,
   pipeInExtraMetaData,
@@ -89,6 +90,7 @@ const ChoicesQuestionScreen: React.ElementType<ChoicesQuestionScreenProps> = ({
 
   const [selected, setSelected] =
     React.useState<ChoicesWithMultipleAnswersAnswerChoices>([]);
+  const latestSelected = React.useRef(selected);
 
   type FlatListData = {
     id: string;
@@ -113,6 +115,35 @@ const ChoicesQuestionScreen: React.ElementType<ChoicesQuestionScreenProps> = ({
     // If we don't use `useEffect`, each time the user update the state, the choices will be re-shuffled.
 
     async function setupAsync() {
+      const savedValue = initialAnswer?.data?.value;
+      if (
+        answerType === ChoicesAnswerType.MULTIPLE_SELECTION &&
+        Array.isArray(savedValue) &&
+        savedValue.length > 0 &&
+        savedValue.every(
+          (choice) =>
+            Array.isArray(choice) &&
+            choice.length === 2 &&
+            typeof choice[0] === "string" &&
+            typeof choice[1] === "boolean",
+        )
+      ) {
+        // Tuples preserve the labels and order the participant originally saw.
+        // Do not re-pipe or reshuffle them when resuming the question.
+        const savedChoices =
+          savedValue as ChoicesWithMultipleAnswersAnswerChoices;
+        setFlatListData(
+          savedChoices.map(([title], index) => ({
+            id: `restored-${index}`,
+            title,
+          })),
+        );
+        latestSelected.current = cloneDeep(savedChoices);
+        setSelected(latestSelected.current);
+        loadingCompleted();
+        return;
+      }
+
       let choices: Choice[];
       if (answerType === ChoicesAnswerType.YESNO) {
         choices = YESNO_CHOICES;
@@ -154,7 +185,28 @@ const ChoicesQuestionScreen: React.ElementType<ChoicesQuestionScreenProps> = ({
       // We have to specify `tempFlatListData` variable here (instead of using
       // the `flatListData` variable) because `flatListData` might still not be
       // updated here.
-      setSelected(initAnswerDataWithFlatListData(tempFlatListData));
+      const initialSelected = initAnswerDataWithFlatListData(tempFlatListData);
+      let savedSelection: string | undefined;
+      if (
+        answerType === ChoicesAnswerType.YESNO &&
+        typeof savedValue === "boolean"
+      ) {
+        savedSelection = savedValue
+          ? YESNO_CHOICES_YES_VALUE
+          : YESNO_CHOICES_NO_VALUE;
+      } else if (
+        answerType === ChoicesAnswerType.SINGLE_SELECTION &&
+        typeof savedValue === "string"
+      ) {
+        savedSelection = savedValue;
+      }
+      if (savedSelection !== undefined) {
+        initialSelected.forEach((choice) => {
+          choice[1] = choice[0] === savedSelection;
+        });
+      }
+      latestSelected.current = initialSelected;
+      setSelected(initialSelected);
 
       loadingCompleted();
     }
@@ -187,12 +239,13 @@ const ChoicesQuestionScreen: React.ElementType<ChoicesQuestionScreenProps> = ({
 
               let newSelected: ChoicesWithMultipleAnswersAnswerChoices;
               if (answerType === ChoicesAnswerType.MULTIPLE_SELECTION) {
-                newSelected = cloneDeep(selected);
+                newSelected = cloneDeep(latestSelected.current);
               } else {
                 // Reset everything to `false` if it is a single-selection question.
                 newSelected = initAnswerDataWithFlatListData();
               }
               newSelected[index][1] = !newSelected[index][1];
+              latestSelected.current = newSelected;
               setSelected(newSelected);
 
               switch (answerType) {

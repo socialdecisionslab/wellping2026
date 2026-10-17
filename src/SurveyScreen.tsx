@@ -21,12 +21,13 @@ import {
   QuestionId,
   QuestionImageOptions,
   QuestionsList,
-  StreamName,
   StudyInfo,
   WrapperQuestion,
   YesNoQuestion,
 } from "@wellping/study-schemas/lib/types";
 import { addDays } from "date-fns";
+import cloneDeep from "lodash/cloneDeep";
+import cloneDeepWith from "lodash/cloneDeepWith";
 import React from "react";
 import {
   Alert,
@@ -40,14 +41,16 @@ import {
   View,
 } from "react-native";
 import { insertAnswerAsync } from "./helpers/answers";
-import {
-  enqueueToFuturePingQueue,
-  getFuturePingsQueue,
-} from "./helpers/asyncStorage/futurePings";
+import { enqueueFollowupPingsOnceAsync } from "./helpers/asyncStorage/futurePings";
 import {
   clearPingStateAsync,
+  getPingStateAsync,
   storePingStateAsync,
 } from "./helpers/asyncStorage/pingState";
+import {
+  getDataOwnerAsync,
+  getJournalPingExpiryAsync,
+} from "./helpers/dataJournal";
 import {
   getCriticalProblemTextForUser,
   getNonCriticalProblemTextForUser,
@@ -61,6 +64,10 @@ import {
 } from "./helpers/helpers";
 import { addEndTimeToPingAsync } from "./helpers/pings";
 import { secureGetPingAsync } from "./helpers/secureStore/ping";
+import {
+  enqueueSurveyAnswerSaveAsync,
+  waitForSurveyAnswerSavesAsync,
+} from "./helpers/surveyAnswerWrites";
 import { DataValidationFunction, QuestionScreenProps } from "./helpers/types";
 import ChoicesQuestionScreen from "./questionScreens/ChoicesQuestionScreen";
 import HowLongAgoQuestionScreen from "./questionScreens/HowLongAgoQuestion";
@@ -72,6 +79,13 @@ import SliderQuestionScreen from "./questionScreens/SliderQuestionScreen";
  * It is used by `pipeInExtraMetaData`.
  */
 type ExtraData = { [key: string]: any };
+
+const COMPLETION_EVENT_KEY = "__wellpingCompletionEvent";
+function recoveryCode(error: unknown): string | undefined {
+  return error !== null && typeof error === "object" && "code" in error
+    ? String(error.code)
+    : undefined;
+}
 
 type CurrentQuestionData = {
   /**
@@ -167,7 +181,12 @@ export default class SurveyScreen extends React.Component<
     super(props);
 
     if (props.previousState) {
-      this.state = props.previousState;
+      this.state = {
+        ...cloneDeepWith(props.previousState, (value) =>
+          value instanceof Date ? new Date(value.getTime()) : undefined,
+        ),
+        isInTransition: false,
+      };
     } else {
       this.state = {
         currentQuestionData: {
@@ -179,60 +198,286 @@ export default class SurveyScreen extends React.Component<
         isInTransition: false,
       };
     }
+    this.committedState = this.state;
   }
 
-  private savingResume = false;
+  private committedState: SurveyScreenState;
+  private operations: Promise<void> = Promise.resolve();
+  private navigationPending = false;
+  private initialResumeReady = false;
+  private stoppedError: unknown = null;
+  private expectedOwnerId: string | undefined;
+  private pingExpiresAt: Date | null = null;
+  private acceptedAnswerIds = new Set<string>();
+  private unmounted = false;
+  private questionGeneration = 0;
+  private releaseRetry: (() => void) | null = null;
+  private readonly cancelled = new Error("Survey screen was closed.");
 
-  private async persistResume(afterSave?: () => Promise<void> | void) {
-    this.savingResume = true;
-    try {
-      await storePingStateAsync(this.props.ping.id, {
-        ...this.state,
-        isInTransition: false,
-      });
-      this.savingResume = false;
-      if (afterSave) await afterSave();
-    } catch (_) {
-      this.savingResume = true;
-      Alert.alert(
-        "Survey not saved",
-        "We could not securely save your progress. Please retry before continuing or closing the app. Your existing saved data has not been discarded.",
-        [
-          {
-            text: "Retry",
-            onPress: () => {
-              void this.persistResume(afterSave);
-            },
-          },
-        ],
-        { cancelable: false },
+  private stopForTerminalError(error: unknown) {
+    const firstNotice = this.stoppedError === null;
+    this.stoppedError = error;
+    if (this.unmounted || !firstNotice) return;
+    this.setState({ isInTransition: false });
+    const expired = recoveryCode(error) === "PING_EXPIRED";
+    Alert.alert(
+      expired ? "Survey window ended" : "Survey needs recovery",
+      expired
+        ? "The survey window has ended. Your earlier saved responses have been preserved."
+        : "This survey cannot continue in the current session. Existing saved responses have been preserved. Please keep the app open and recover the original session before continuing.",
+      [{ text: "OK" }],
+      { cancelable: false },
+    );
+  }
+
+  private acceptsEventAt(date: Date): boolean {
+    if (this.pingExpiresAt && date.getTime() > this.pingExpiresAt.getTime()) {
+      this.stopForTerminalError(
+        Object.assign(new Error("Survey window ended."), {
+          code: "PING_EXPIRED",
+        }),
       );
+      return false;
     }
+    return true;
+  }
+
+  /** Keep failures at the head of the queue until the participant retries. */
+  private async retrySave<T>(
+    operation: () => Promise<T>,
+    drainAcceptedAnswer = false,
+  ): Promise<T> {
+    while (!this.unmounted || drainAcceptedAnswer) {
+      try {
+        return await operation();
+      } catch (error) {
+        const code = recoveryCode(error);
+        if (
+          code === "PING_EXPIRED" ||
+          code === "OWNER_CHANGED" ||
+          code === "NO_ACTIVE_OWNER" ||
+          code === "SESSION_CLOSED" ||
+          code === "INVALID_COMPLETION_EVENT"
+        ) {
+          this.stopForTerminalError(error);
+          throw error;
+        }
+        if (this.unmounted) {
+          if (drainAcceptedAnswer) throw error;
+          break;
+        }
+        await new Promise<void>((resolve) => {
+          let waiting = true;
+          const retry = () => {
+            if (!waiting) return;
+            waiting = false;
+            this.releaseRetry = null;
+            resolve();
+          };
+          this.releaseRetry = retry;
+          Alert.alert(
+            "Survey not saved",
+            "We could not securely save your progress. Please retry before continuing or closing the app. Your existing saved data has not been discarded.",
+            [{ text: "Retry", onPress: retry }],
+            { cancelable: false },
+          );
+        });
+      }
+    }
+    throw this.cancelled;
+  }
+
+  private enqueue(
+    operation: () => Promise<void>,
+    drainAcceptedAnswer = false,
+  ): Promise<void> {
+    const result = this.operations.then(async () => {
+      if (
+        (!this.unmounted && this.stoppedError === null) ||
+        drainAcceptedAnswer
+      ) {
+        await this.retrySave(operation, drainAcceptedAnswer);
+      }
+    });
+    // Already accepted answers survive expiration/unmount. Navigation and resume
+    // writes do not: the last saved position reconciles the durable answers.
+    // Detached failures cannot ask for Retry; durable journal recovery remains
+    // available for writes that reached storage, without stale UI alerts.
+    this.operations = result.catch(() => undefined);
+    return this.operations;
+  }
+
+  private applyCommittedState(state: SurveyScreenState) {
+    this.committedState = state;
+    if (!this.unmounted) this.setState(state);
   }
 
   private completionDelivered = false;
 
   private async finishTerminalResume() {
     if (
-      this.state.currentQuestionData.questionId !== null ||
-      this.completionDelivered
+      this.committedState.currentQuestionData.questionId !== null ||
+      this.completionDelivered ||
+      this.stoppedError !== null
     )
       return;
     // The terminal snapshot and ping completion are separate durable writes.
     // Recover if the app closed between them, without changing an existing end time.
-    const savedPing = await secureGetPingAsync(this.props.ping.id);
+    const savedPing = await secureGetPingAsync(
+      this.props.ping.id,
+      this.expectedOwnerId,
+    );
     if (!savedPing)
       throw new Error("Cannot finish a survey whose ping is missing.");
+    if (this.unmounted) return;
     const finishedPing = savedPing.endTime
       ? savedPing
-      : await addEndTimeToPingAsync(savedPing.id, new Date());
-    await clearPingStateAsync(savedPing.id);
-    this.props.onFinish(finishedPing);
+      : await addEndTimeToPingAsync(
+          savedPing.id,
+          this.completionRequestedAt(savedPing),
+          this.expectedOwnerId,
+        );
+    if (this.unmounted) return;
+    await clearPingStateAsync(savedPing.id, this.expectedOwnerId);
+    if (this.unmounted) return;
     this.completionDelivered = true;
+    this.props.onFinish(finishedPing);
+  }
+
+  private completionRequestedAt(ping: Ping): Date {
+    const event =
+      this.committedState.currentQuestionData.extraData[COMPLETION_EVENT_KEY];
+    // Older snapshots did not preserve the click time. Do not invent an earlier
+    // time for them; the journal still enforces the original protocol deadline.
+    if (event === undefined) return new Date();
+    const date = new Date(event?.requestedAt);
+    if (
+      event === null ||
+      typeof event !== "object" ||
+      event.version !== 1 ||
+      event.ownerId !== this.expectedOwnerId ||
+      event.pingId !== ping.id ||
+      typeof event.questionId !== "string" ||
+      !Object.prototype.hasOwnProperty.call(
+        this.props.questions,
+        event.questionId,
+      ) ||
+      typeof event.requestedAt !== "string" ||
+      !Number.isFinite(date.getTime()) ||
+      date.toISOString() !== event.requestedAt ||
+      date.getTime() < ping.startTime.getTime() ||
+      date.getTime() > Date.now() ||
+      this.committedState.nextQuestionsDataStack.length !== 0
+    ) {
+      throw Object.assign(
+        new Error("Invalid terminal completion event; data preserved."),
+        {
+          code: "INVALID_COMPLETION_EVENT",
+        },
+      );
+    }
+    return date;
   }
 
   componentDidMount() {
-    void this.persistResume(() => this.finishTerminalResume());
+    void this.enqueue(async () => {
+      const owner = await getDataOwnerAsync();
+      if (this.unmounted) return;
+      this.expectedOwnerId = owner.id;
+      this.pingExpiresAt = await getJournalPingExpiryAsync(
+        this.props.ping.id,
+        owner.id,
+      );
+      if (this.unmounted) return;
+      const drainedAnswers = await waitForSurveyAnswerSavesAsync(
+        owner.id,
+        this.props.ping.id,
+      );
+      if (this.unmounted) return;
+      // Home may have read its snapshot while the old instance was draining.
+      // Re-read after that lane, merging authoritative owner-verified answers.
+      let refreshResume = true;
+      let initialState: SurveyScreenState;
+      try {
+        initialState = await getPingStateAsync(
+          this.props.ping.id,
+          this.expectedOwnerId,
+        );
+      } catch (error) {
+        if (
+          recoveryCode(error) !== "MISSING_RESUME_STATE" ||
+          this.props.previousState !== null ||
+          drainedAnswers
+        )
+          throw error;
+        // Only an explicitly absent resume for a new ping permits a fresh
+        // baseline. An old screen may have finished draining during owner/expiry
+        // lookup, so absence of a currently pending lane is not proof of newness.
+        refreshResume = false;
+        initialState = this.committedState;
+      }
+      if (this.unmounted) return;
+      await storePingStateAsync(
+        this.props.ping.id,
+        initialState,
+        this.expectedOwnerId,
+      );
+      if (this.unmounted) return;
+      // No input is accepted without a durable question position to recover.
+      // Remount seeded controls if the authoritative answer changed while waiting.
+      if (refreshResume) this.questionGeneration += 1;
+      this.initialResumeReady = true;
+      this.applyCommittedState({ ...initialState, isInTransition: false });
+      const initialQuestionId = initialState.currentQuestionData.questionId;
+      if (initialQuestionId === null) {
+        void this.enqueue(() => this.finishTerminalResume());
+      } else if (
+        this.props.questions[initialQuestionId] &&
+        NON_USER_QUESTION_TYPES.includes(
+          this.props.questions[initialQuestionId].type,
+        )
+      ) {
+        this.onNextSelect();
+      }
+    });
+  }
+
+  private enqueueAcceptedAnswer(
+    question: Question,
+    realQuestionId: string,
+    input: {
+      preferNotToAnswer: true | null;
+      data: AnswerData | null;
+      date: Date;
+    },
+  ) {
+    // Register immediately, so a remount/logout sees every accepted event even
+    // before this instance's preceding operation reaches native storage.
+    const previousLocalOperation = this.operations;
+    const result = enqueueSurveyAnswerSaveAsync(
+      this.expectedOwnerId!,
+      this.props.ping.id,
+      async () => {
+        await previousLocalOperation;
+        try {
+          await this.retrySave(
+            () => this.saveAnswer(question, realQuestionId, input),
+            true,
+          );
+        } catch (error) {
+          // A post-window event was never a valid accepted response. Do not keep
+          // retrying it or block cleanup of earlier, valid durable responses.
+          if (recoveryCode(error) !== "PING_EXPIRED") throw error;
+        }
+      },
+    );
+    this.operations = result.catch(() => undefined);
+    return this.operations;
+  }
+
+  componentWillUnmount() {
+    this.unmounted = true;
+    this.releaseRetry?.();
   }
 
   /**
@@ -404,30 +649,6 @@ export default class SurveyScreen extends React.Component<
           ? ynQ.branchStartId.yes
           : ynQ.branchStartId.no;
         considerConditionalQuestionId(jumpQuestionId);
-      }
-
-      // Set up follow-up streams.
-      if (
-        ynD.value === true &&
-        ynQ.addFollowupStream &&
-        ynQ.addFollowupStream.yes
-      ) {
-        const futureStreamName: StreamName = ynQ.addFollowupStream.yes;
-
-        // TODO: ADD SUPPORT TO CUSTOMIZE DATE AFTER
-        getFuturePingsQueue().then((futurePings) => {
-          if (futurePings.length === 0) {
-            enqueueToFuturePingQueue({
-              afterDate: addDays(new Date(), 3),
-              streamName: futureStreamName,
-            }).then(() => {
-              enqueueToFuturePingQueue({
-                afterDate: addDays(new Date(), 7),
-                streamName: futureStreamName,
-              });
-            });
-          }
-        });
       }
     };
 
@@ -633,99 +854,152 @@ export default class SurveyScreen extends React.Component<
     return newNextQuestionsStack;
   }
 
-  /**
-   * Goes to the next question.
-   */
-  onNextSelect() {
-    if (this.savingResume) return;
-    // Reset this so that the new `QuestionScreen` can set it.
-    this.dataValidationFunction = null;
-
-    const { questions, ping } = this.props;
-
-    const setStateCallback = () => {
-      void this.persistResume(async () => {
-        const {
-          currentQuestionData: { questionId: currentQuestionid },
-        } = this.state;
-
-        if (
-          currentQuestionid &&
-          NON_USER_QUESTION_TYPES.includes(questions[currentQuestionid].type)
-        ) {
-          // Directly calculates and goes to next if it's a branching question as
-          // they are not actually a user question.
-          this.onNextSelect();
-        }
-
-        if (currentQuestionid == null) {
-          // There is no more question to answer.
-          await this.finishTerminalResume();
-        }
-      });
+  /** Calculate navigation without mutating a committed/resumable stack. */
+  private nextStateAfter(state: SurveyScreenState): SurveyScreenState {
+    const { currentQuestionData, answers, nextQuestionsDataStack } = state;
+    if (currentQuestionData.questionId === null) return state;
+    const prevQuestion = this.props.questions[currentQuestionData.questionId];
+    const newNextQuestionsStack = this.getNewNextQuestionsDataStack({
+      prevQuestion,
+      prevAnswer: answers[this.getRealQuestionId(prevQuestion, state)],
+      prevExtraData: currentQuestionData.extraData,
+      answers,
+      prevState: state,
+    });
+    const stack = [...nextQuestionsDataStack, ...newNextQuestionsStack];
+    return {
+      ...state,
+      currentQuestionData: stack.pop() || { questionId: null, extraData: {} },
+      nextQuestionsDataStack: stack,
+      isInTransition: false,
     };
+  }
 
+  private async scheduleFollowups(state: SurveyScreenState) {
+    const id = state.currentQuestionData.questionId;
+    if (id === null) return;
+    const question = this.props.questions[id];
+    const answer = state.answers[this.getRealQuestionId(question, state)];
+    if (question.type !== QuestionType.YesNo || answer?.preferNotToAnswer)
+      return;
+    const streamName = (question as YesNoQuestion).addFollowupStream?.yes;
+    if (!streamName || (answer?.data as YesNoAnswerData | null)?.value !== true)
+      return;
+    // The saved answer's timestamp anchors both dates across interrupted retries.
+    const answeredAt = new Date(answer.date);
+    const operationId = JSON.stringify([
+      this.props.ping.id,
+      answer.questionId,
+      streamName,
+    ]);
+    await this.retrySave(() =>
+      enqueueFollowupPingsOnceAsync(
+        operationId,
+        [3, 7].map((days) => ({
+          afterDate: addDays(answeredAt, days),
+          streamName,
+        })),
+        this.expectedOwnerId,
+      ),
+    );
+  }
+
+  /** Wait for all accepted input and its resume snapshot before advancing. */
+  onNextSelect(
+    mode: "next" | "skip" | "preferNotToAnswer" = "next",
+    generation: number = this.questionGeneration,
+  ) {
+    if (
+      this.unmounted ||
+      this.stoppedError !== null ||
+      !this.initialResumeReady ||
+      this.navigationPending ||
+      generation !== this.questionGeneration
+    )
+      return;
+    const date = new Date();
+    if (!this.acceptsEventAt(date)) return;
+    if (
+      mode === "next" &&
+      this.dataValidationFunction &&
+      !this.dataValidationFunction()
+    )
+      return;
+    this.navigationPending = true;
     this.setState({ isInTransition: true });
-    this.setState((prevState) => {
-      const {
-        currentQuestionData: {
-          questionId: prevQuestionId,
-          extraData: prevExtraData,
-        },
-        answers,
-        nextQuestionsDataStack: prevNextQuestionsDataStack,
-      } = prevState;
+    const questionId = this.committedState.currentQuestionData.questionId;
+    if (questionId === null) return;
+    const question = this.props.questions[questionId];
+    const realQuestionId = this.getRealQuestionId(
+      question,
+      this.committedState,
+    );
 
-      if (prevQuestionId === null) {
-        throw new Error("prevQuestionId === null");
-      }
-
-      const prevQuestion = questions[prevQuestionId];
-      const prevAnswer =
-        answers[this.getRealQuestionId(prevQuestion, prevState)];
-
-      const newNextQuestionsStack = this.getNewNextQuestionsDataStack({
-        prevQuestion,
-        prevAnswer,
-        prevExtraData,
-        answers,
-        prevState,
+    if (
+      !NON_USER_QUESTION_TYPES.includes(question.type) &&
+      (mode !== "next" ||
+        (this.committedState.answers[realQuestionId] == null &&
+          !this.acceptedAnswerIds.has(realQuestionId)))
+    ) {
+      this.acceptedAnswerIds.add(realQuestionId);
+      void this.enqueueAcceptedAnswer(question, realQuestionId, {
+        preferNotToAnswer: mode === "preferNotToAnswer" ? true : null,
+        data: null,
+        date,
       });
-
-      if (newNextQuestionsStack.length === 0) {
-        // There isn't any question following the previous question, so we want
-        // to pop from the stack if there is something left in the stack.
-        let nextQuestionData!: CurrentQuestionData;
-        if (prevNextQuestionsDataStack.length > 0) {
-          nextQuestionData = prevNextQuestionsDataStack.pop()!;
-        } else {
-          // If there isn't anything left in stack, `questionId` will be `null`,
-          // indicating that the ping has ended.
-          nextQuestionData = {
+    }
+    void this.enqueue(async () => {
+      await this.scheduleFollowups(this.committedState);
+      if (this.unmounted || this.stoppedError !== null) return;
+      let nextState = this.nextStateAfter(this.committedState);
+      const visited = new Set<string>();
+      while (
+        nextState.currentQuestionData.questionId !== null &&
+        NON_USER_QUESTION_TYPES.includes(
+          this.props.questions[nextState.currentQuestionData.questionId]?.type,
+        )
+      ) {
+        const marker = JSON.stringify([
+          nextState.currentQuestionData,
+          nextState.nextQuestionsDataStack,
+        ]);
+        if (visited.has(marker))
+          throw new Error("Survey branching contains a cycle.");
+        visited.add(marker);
+        nextState = this.nextStateAfter(nextState);
+      }
+      if (nextState.currentQuestionData.questionId === null) {
+        nextState = {
+          ...nextState,
+          currentQuestionData: {
             questionId: null,
-            extraData: {},
-          };
-        }
-        return {
-          currentQuestionData: nextQuestionData,
-          nextQuestionsDataStack: prevNextQuestionsDataStack,
-        };
-      } else {
-        // We pop the `jumpQuestionsDataStack` to find what question we should
-        // immediately go.
-        const immediateNext = newNextQuestionsStack.pop()!;
-        return {
-          currentQuestionData: immediateNext,
-          nextQuestionsDataStack: [
-            // We add any additional `jumpQuestionsDataStack` on top of the
-            // existing stack.
-            ...prevNextQuestionsDataStack,
-            ...newNextQuestionsStack,
-          ],
+            extraData: {
+              [COMPLETION_EVENT_KEY]: {
+                version: 1,
+                ownerId: this.expectedOwnerId,
+                pingId: this.props.ping.id,
+                questionId,
+                requestedAt: date.toISOString(),
+              },
+            },
+          },
         };
       }
-    }, setStateCallback);
-    // TODO: try setTimeout 250 /* wait for a little while to make the experience better */);
+      // Do not display the destination (or complete the ping) until it is durable.
+      await this.retrySave(() =>
+        storePingStateAsync(
+          this.props.ping.id,
+          nextState,
+          this.expectedOwnerId,
+        ),
+      );
+      if (this.unmounted) return;
+      this.dataValidationFunction = null;
+      this.questionGeneration += 1;
+      this.navigationPending = false;
+      this.applyCommittedState(nextState);
+    });
+    void this.enqueue(() => this.finishTerminalResume());
   }
 
   getRealQuestionId(
@@ -739,40 +1013,70 @@ export default class SurveyScreen extends React.Component<
     );
   }
 
-  async addAnswerToAnswersListAsync(
+  private async saveAnswer(
+    question: Question,
+    realQuestionId: string,
+    input: {
+      preferNotToAnswer: true | null;
+      data: AnswerData | null;
+      date: Date;
+    },
+  ) {
+    const answer = await this.retrySave(
+      () =>
+        insertAnswerAsync({
+          ping: this.props.ping,
+          question,
+          realQuestionId,
+          expectedOwnerId: this.expectedOwnerId,
+          ...input,
+        }),
+      true,
+    );
+    if (this.unmounted) return;
+    const state = {
+      ...this.committedState,
+      answers: { ...this.committedState.answers, [realQuestionId]: answer },
+      isInTransition: false,
+    };
+    await this.retrySave(() =>
+      storePingStateAsync(this.props.ping.id, state, this.expectedOwnerId),
+    );
+    if (!this.unmounted) this.applyCommittedState(state);
+  }
+
+  addAnswerToAnswersListAsync(
     question: Question,
     {
       preferNotToAnswer = null,
       data = null,
       date = new Date(),
     }: {
-      preferNotToAnswer?: true | null; // See `MARK: WHY_PNA_TRUE_OR_NULL`.
+      preferNotToAnswer?: true | null;
       data?: AnswerData | null;
       date?: Date;
     },
+    realQuestionId = this.getRealQuestionId(question, this.committedState),
+    generation = this.questionGeneration,
   ): Promise<void> {
-    const realQuestionId = this.getRealQuestionId(question);
-
-    const answer = await insertAnswerAsync({
-      ping: this.props.ping,
-      question,
-      realQuestionId,
+    if (
+      this.unmounted ||
+      this.stoppedError !== null ||
+      !this.initialResumeReady ||
+      this.navigationPending ||
+      generation !== this.questionGeneration
+    )
+      return Promise.resolve();
+    if (!this.acceptsEventAt(date)) return Promise.resolve();
+    // Values and expanded IDs belong to the event, not to whichever repeated
+    // question happens to be visible when the queued native write completes.
+    const input = {
       preferNotToAnswer,
-      data,
-      date,
-    });
-
-    await new Promise<void>((resolve, reject) => {
-      this.setState(
-        (prevState) => ({
-          answers: {
-            ...prevState.answers,
-            [realQuestionId]: answer,
-          },
-        }),
-        () => resolve(),
-      );
-    });
+      data: cloneDeep(data),
+      date: new Date(date.getTime()),
+    };
+    this.acceptedAnswerIds.add(realQuestionId);
+    return this.enqueueAcceptedAnswer(question, realQuestionId, input);
   }
 
   dataValidationFunction: DataValidationFunction | null = null;
@@ -800,6 +1104,8 @@ export default class SurveyScreen extends React.Component<
       );
     }
     const realQuestionId = this.getRealQuestionId(question);
+    const generation = this.questionGeneration;
+    const renderState = this.state;
 
     type QuestionScreenType = React.ElementType<QuestionScreenProps>;
     let QuestionScreen: QuestionScreenType;
@@ -853,6 +1159,12 @@ export default class SurveyScreen extends React.Component<
       );
 
     const nextButtonIsDisabled = (): boolean => {
+      if (
+        !this.initialResumeReady ||
+        this.navigationPending ||
+        this.stoppedError !== null
+      )
+        return true;
       if (studyInfo.alwaysEnableNextButton) {
         return false;
       }
@@ -880,6 +1192,13 @@ export default class SurveyScreen extends React.Component<
     return (
       <View
         testID="mainSurveyScreenView"
+        pointerEvents={
+          !this.initialResumeReady ||
+          this.navigationPending ||
+          this.stoppedError !== null
+            ? "none"
+            : "auto"
+        }
         style={{
           paddingHorizontal: 20,
           marginTop: 5,
@@ -888,7 +1207,7 @@ export default class SurveyScreen extends React.Component<
           // We use `opacity` so that `QuestionScreen` still loads and are able
           // to call `loadingCompleted` and set `isInTransition`.
           // We use 0.05 instead 0 so that if there's error, we can still see it.
-          opacity: isInTransition ? 0.025 : 1,
+          opacity: !this.initialResumeReady || isInTransition ? 0.025 : 1,
         }}
       >
         <View style={{ flex: 0 }}>
@@ -962,27 +1281,43 @@ export default class SurveyScreen extends React.Component<
             <View style={{ flex: 1 }}>
               <QuestionScreen
                 /* https://stackoverflow.com/a/21750576/2603230 */
-                key={question.id}
+                key={`${realQuestionId}:${generation}`}
                 question={question}
+                initialAnswer={answers[realQuestionId]}
                 loadingCompleted={() => {
-                  this.setState({ isInTransition: false });
+                  if (
+                    !this.unmounted &&
+                    this.initialResumeReady &&
+                    !this.navigationPending &&
+                    generation === this.questionGeneration
+                  ) {
+                    this.setState({ isInTransition: false });
+                  }
                 }}
                 onDataChange={(data) => {
-                  this.addAnswerToAnswersListAsync(question, {
-                    data,
-                  });
+                  void this.addAnswerToAnswersListAsync(
+                    question,
+                    { data },
+                    realQuestionId,
+                    generation,
+                  );
                 }}
                 allAnswers={answers}
                 allQuestions={questions}
                 pipeInExtraMetaData={(input) =>
                   this.replacePlaceholders(
                     input,
-                    this.state,
+                    renderState,
                     question.defaultPlaceholderValues,
                   )
                 }
                 setDataValidationFunction={(func) => {
-                  this.dataValidationFunction = func;
+                  if (
+                    !this.unmounted &&
+                    generation === this.questionGeneration
+                  ) {
+                    this.dataValidationFunction = func;
+                  }
                 }}
               />
             </View>
@@ -990,13 +1325,12 @@ export default class SurveyScreen extends React.Component<
         </View>
         {question.extraCustomNextWithoutAnsweringButton && (
           <Button
-            onPress={async () => {
-              // Clicking this button is equivalent to clicking "Next" without answering.
-              await this.addAnswerToAnswersListAsync(question, {
-                data: null,
-              });
-              this.onNextSelect();
-            }}
+            disabled={
+              !this.initialResumeReady ||
+              this.navigationPending ||
+              this.stoppedError !== null
+            }
+            onPress={() => this.onNextSelect("skip", generation)}
             accessibilityLabel={question.extraCustomNextWithoutAnsweringButton}
             title={question.extraCustomNextWithoutAnsweringButton}
           />
@@ -1010,33 +1344,18 @@ export default class SurveyScreen extends React.Component<
           }}
         >
           <Button
-            onPress={async () => {
-              await this.addAnswerToAnswersListAsync(question, {
-                preferNotToAnswer: true,
-              });
-              this.onNextSelect();
-            }}
+            disabled={
+              !this.initialResumeReady ||
+              this.navigationPending ||
+              this.stoppedError !== null
+            }
+            onPress={() => this.onNextSelect("preferNotToAnswer", generation)}
             accessibilityLabel="Prefer not to answer the current question"
             title="Prefer not to answer"
           />
           <Button
             disabled={nextButtonIsDisabled()}
-            onPress={async () => {
-              if (answers[realQuestionId] == null) {
-                // The user clicks "Next" without answering.
-                await this.addAnswerToAnswersListAsync(question, {
-                  data: null,
-                });
-              } else {
-                if (
-                  this.dataValidationFunction &&
-                  !this.dataValidationFunction()
-                ) {
-                  return;
-                }
-              }
-              this.onNextSelect();
-            }}
+            onPress={() => this.onNextSelect("next", generation)}
             accessibilityLabel="Next question"
             title="Next"
           />

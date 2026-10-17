@@ -1,6 +1,7 @@
 import { Ping, StudyInfo } from "@wellping/study-schemas/lib/types";
 import {
   fireEvent,
+  act,
   waitFor,
   waitForElementToBeRemoved,
   RenderAPI,
@@ -170,13 +171,20 @@ export async function testCurrentQuestionAsync({
   onFinishFn?: jest.Mock;
 }): Promise<void> {
   // Wait for the question to be loaded.
-  await waitFor(() => getByTestId(QUESTION_TITLE_TESTID));
+  await waitFor(() => {
+    expect(getByTestId(QUESTION_TITLE_TESTID)).toBeTruthy();
+    expect(getByTestId(MAIN_SURVEY_SCREEN_VIEW).props.pointerEvents).toBe(
+      "auto",
+    );
+  });
   expect(queryByTestId(QUESTION_TITLE_TESTID)).not.toBeNull();
 
   const getCurrentQuestionTitle = () =>
     getByTestId(QUESTION_TITLE_TESTID).props.children;
 
-  await expectCurrentQuestionAsync(getCurrentQuestionTitle);
+  await act(async () => {
+    await expectCurrentQuestionAsync(getCurrentQuestionTitle);
+  });
 
   await waitForExpect(async () => {
     // Expect the screen to return to non-blank after the transition between
@@ -186,21 +194,15 @@ export async function testCurrentQuestionAsync({
     ).toBe(1);
   });
 
-  // For some reason we have to do this to ensure `fireEvent` works in
-  // `expectCurrentQuestionAsync`.
-  await new Promise<void>((resolve, reject) => {
-    setTimeout(() => {
-      resolve();
-    }, 0);
-  });
-
   const currentQuestionTitle = getCurrentQuestionTitle();
 
-  if (nextButton === "next") {
-    fireEvent.press(getByLabelText(NEXT_BUTTON_A11YLABEL));
-  } else if (nextButton === "pna") {
-    fireEvent.press(getByLabelText(PNA_BUTTON_A11YLABEL));
-  }
+  await act(async () => {
+    if (nextButton === "next") {
+      fireEvent.press(getByLabelText(NEXT_BUTTON_A11YLABEL));
+    } else if (nextButton === "pna") {
+      fireEvent.press(getByLabelText(PNA_BUTTON_A11YLABEL));
+    }
+  });
 
   if (waitForAndTestEndPage) {
     if (queryByTestId(QUESTION_TITLE_TESTID)) {
