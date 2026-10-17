@@ -180,19 +180,27 @@ export async function downloadStudyFileAsync({
  * initializes Firebase and stores the downloaded study file in Async Storage.
  * Returns `null` if all processes are successful.
  * Returns the error message if any process is unsuccessful.
+ * Validation failures preserve the saved study so it can be loaded on restart.
  */
 export async function parseAndStoreStudyFileAsync(
   rawJsonString: string,
 ): Promise<string | null> {
+  let startedStoringStudyFile = false;
   try {
     const parsedStudy = StudyFileSchema.parse(JSON.parse(rawJsonString));
     if (isUsingFirebase(parsedStudy.studyInfo)) {
       validateAndInitializeFirebaseWithConfig(parsedStudy.studyInfo);
     }
+    startedStoringStudyFile = true;
     await storeCurrentStudyFileAsync(parsedStudy);
     return null;
   } catch (e) {
-    await clearCurrentStudyFileAsync();
+    // An invalid download has not changed storage. Keep the last valid study
+    // and its storage namespace available after the error screen's restart.
+    // Once writes begin, retain the existing cleanup for partial writes.
+    if (startedStoringStudyFile) {
+      await clearCurrentStudyFileAsync();
+    }
 
     if (e instanceof Error) {
       return `**${e.name}**\n${e.message}`;
