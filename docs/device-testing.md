@@ -38,3 +38,11 @@ Record the build commit, phone model, OS version, and result for each check:
 5. Check small screens, keyboard dismissal, large text and a screen reader. Record any clipped text or inaccessible controls.
 
 These builds intentionally have no notifications or uploads. Test reminder timing and end-to-end exports in the later staging-backend phase. Build success alone is not a device-test result.
+
+## Apple account setup
+
+Rui confirmed that an Apple Developer Program account still needs to be created. First ask UF's IT or research software support whether an institutional developer team can host this study app and grant the lab access. If a new institutional enrollment is needed, an authorized representative should complete it under the university's legal entity, rather than the lab's informal name.
+
+Apple's [enrollment guide](https://developer.apple.com/help/account/membership/program-enrollment/) explains organization verification and signing authority. Accredited educational institutions may request a [membership fee waiver](https://developer.apple.com/help/account/membership/fee-waivers). A personal account is another route, but institutional ownership is preferable for continuity of a lab app. No enrollment or purchase has been submitted by this workflow.
+
+Once the team is active, configure the lab-owned app identifier, signing and test device provisioning. The Android APK and simulator work do not depend on this enrollment.

@@ -1,0 +1,43 @@
+name: iPhone simulator smoke test
+on:
+  workflow_dispatch:
+  push:
+    branches: [codex/modernize-mobile-runtime]
+    paths:
+      - '.github/workflows/simulator-smoke.yml'
+      - 'scripts/smoke-ios.sh'
+permissions:
+  contents: read
+  actions: read
+jobs:
+  launch:
+    runs-on: macos-26
+    timeout-minutes: 60
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.4.1.app/Contents/Developer
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download the latest native test build from this branch
+        shell: bash
+        run: |
+          WP_RUN=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/native-preview.yml/runs?branch=$GITHUB_REF_NAME&per_page=1" --jq '.workflow_runs[0].id')
+          test "$WP_RUN" != null
+          gh run watch "$WP_RUN" --exit-status --interval 30
+          gh run view "$WP_RUN" --json headSha,url > tested-build.json
+          cat tested-build.json
+          gh run download "$WP_RUN" -n Well-Ping-Local-iOS-Simulator -D preview
+          mkdir -p build/ios/Build/Products/Release-iphonesimulator
+          unzip -q preview/Well-Ping-Local-Simulator.zip -d build/ios/Build/Products/Release-iphonesimulator
+      - name: Launch and reopen in iPhone simulator
+        run: bash scripts/smoke-ios.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: iPhone-simulator-test-evidence
+          path: |
+            tested-build.json
+            ios-first-launch.png
+            ios-reopen.png
+            simulator-processes.txt
+          retention-days: 14
