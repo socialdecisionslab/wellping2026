@@ -75,3 +75,6 @@ coverage/**/*
 /ios/
 /android/
 /dist/
+
+# Local researcher tool compilation; never contains study/participant data.
+/.research-console-build/

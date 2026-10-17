@@ -31,6 +31,8 @@ jobs:
         run: corepack yarn lint
       - name: Type-check and test with synthetic data
         run: corepack yarn test:ci
+      - name: Test local researcher workbench with synthetic data
+        run: corepack yarn test:researcher
       - name: Compile isolated iOS and Android bundles
         run: corepack yarn smoke:local
       - name: Compile production participant UI without launching or backend access

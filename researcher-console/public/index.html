@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Well Ping · Research workbench</title>
+    <link rel="stylesheet" href="/style.css" />
+    <script defer src="/app.js"></script>
+  </head>
+  <body>
+    <main>
+      <header>
+        <p class="eyebrow">WELL PING / LOCAL DEVELOPMENT</p>
+        <h1>Research workbench</h1>
+        <p>
+          Prepare versioned study files and inspect synthetic response exports
+          without connecting to a study backend.
+        </p>
+      </header>
+      <aside class="notice">
+        <strong>Local operator only. Not a hosted researcher dashboard.</strong>
+        No multi-user authentication, enforced roles, participant enrollment,
+        live delivery telemetry or backend publishing is connected. Use
+        synthetic data during evaluation. Nothing is saved automatically:
+        download your history before closing this tab.
+      </aside>
+      <p id="status" role="status" aria-live="polite">Ready. No data loaded.</p>
+      <section>
+        <h2>1. Create or import a study</h2>
+        <div class="fields">
+          <label
+            >Study ID<input
+              id="study-id"
+              value="synthetic_study"
+              pattern="[A-Za-z0-9_]+" /></label
+          ><label>Version<input id="version" value="1" /></label
+          ><label
+            >Study contact email<input
+              id="email"
+              type="email"
+              value="team@example.invalid" /></label
+          ><label
+            >Consent URL<input
+              id="consent"
+              type="url"
+              value="https://example.invalid/consent"
+          /></label>
+        </div>
+        <button id="create">Create a draft template</button
+        ><label class="file"
+          >Import study JSON<input
+            id="study-file"
+            type="file"
+            accept=".json,application/json"
+        /></label>
+        <p>
+          The template is not a study protocol. Replace its question, dates,
+          consent URL and upload configuration before any participant use. This
+          tool never publishes or enrolls anyone.
+        </p>
+      </section>
+      <section>
+        <h2>2. Review questionnaire and save immutable revisions</h2>
+        <label
+          >Study JSON, using the mobile app's schema<textarea
+            id="editor"
+            rows="18"
+            spellcheck="false"
+            aria-describedby="editor-help"
+          ></textarea>
+        </label>
+        <p id="editor-help">
+          All supported question types, conditional branches and schedule fields
+          remain editable. Saving a revision requires a unique
+          studyInfo.version. Original files and earlier revisions are never
+          overwritten.
+        </p>
+        <div class="actions">
+          <button id="validate">Validate draft</button
+          ><button id="revision">Save revision in this tab</button
+          ><button id="download-study">Download validated study JSON</button
+          ><button id="download-history">Download revision history</button
+          ><label class="file"
+            >Restore history<input
+              id="history-file"
+              type="file"
+              accept=".json,application/json"
+          /></label>
+        </div>
+        <label
+          >Saved revision<select id="revisions">
+            <option value="">No saved revisions</option>
+          </select></label
+        >
+        <p id="history-summary">0 revisions saved in memory.</p>
+      </section>
+      <section>
+        <h2>3. Review scheduling and time zones</h2>
+        <label
+          >IANA viewing zone<input id="zone" value="America/New_York" /></label
+        ><button id="schedule">Review schedule</button>
+        <p>
+          Mobile schedules use participant-device local time, including local
+          interpretation of study start/end wall time. This viewing zone does
+          not deploy a fixed-zone schedule. Imported absolute response
+          timestamps can be projected into the viewing zone; original offsets
+          are retained.
+        </p>
+        <pre id="schedule-output" aria-label="Schedule review">
+No schedule loaded.</pre
+        >
+      </section>
+      <section>
+        <h2>4. Inspect response exports</h2>
+        <label class="file"
+          >Import version 1 session exports<input
+            id="response-files"
+            type="file"
+            accept=".json,application/json"
+            multiple /></label
+        ><button id="clear-responses">
+          Clear imported responses from this tab
+        </button>
+        <p id="totals">No response exports loaded.</p>
+        <div class="table-scroll">
+          <table>
+            <caption>
+              Completion in imported records only, not study-wide compliance
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">Participant</th>
+                <th scope="col">Session</th>
+                <th scope="col">Completed</th>
+                <th scope="col">Incomplete</th>
+                <th scope="col">Answers</th>
+                <th scope="col">Delivery evidence</th>
+              </tr>
+            </thead>
+            <tbody id="sessions"></tbody>
+          </table>
+        </div>
+        <p>
+          Missing records do not prove noncompletion. Notification and upload
+          delivery errors are unknown unless a verified backend/telemetry
+          contract provides them. An imported file is not a server receipt.
+        </p>
+        <div class="actions">
+          <button id="download-responses" disabled>
+            Download validated response bundle</button
+          ><button id="download-summary" disabled>
+            Download completion CSV</button
+          ><button id="project" disabled>
+            View imported timestamps in selected zone
+          </button>
+        </div>
+        <pre id="times-output" aria-label="Timestamp projection">
+No imported timestamps.</pre
+        >
+      </section>
+      <footer>
+        No remote analytics, uploads or automatic persistence. Keep exported
+        files in your institution's approved storage. Backend authorization,
+        role enforcement and retention policies are separate release gates.
+      </footer>
+    </main>
+  </body>
+</html>

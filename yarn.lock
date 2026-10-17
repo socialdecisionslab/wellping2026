@@ -6530,7 +6530,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"jsdom@npm:^20.0.0":
+"jsdom@npm:20.0.3, jsdom@npm:^20.0.0":
   version: 20.0.3
   resolution: "jsdom@npm:20.0.3"
   dependencies:
@@ -9371,6 +9371,7 @@ __metadata:
     jest-date-mock: "npm:^1.0.8"
     jest-expo: "npm:~57.0.6"
     js-yaml: "npm:^3.14.0"
+    jsdom: "npm:20.0.3"
     lodash: "npm:^4.17.19"
     prettier: "npm:^2.5.1"
     react: "npm:19.2.3"
