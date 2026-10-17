@@ -15,6 +15,7 @@ module.exports = {
   plugins: ["prettier"],
   ignorePatterns: ["**/*.snap"],
   rules: {
+    "no-console": "error",
     "prettier/prettier": "error",
 
     "no-fallthrough": "off",

@@ -6,8 +6,10 @@ import { Text, View } from "react-native";
 import { WebView } from "react-native-webview";
 
 import { getInstallationIDAsync } from "../helpers/debug";
-import { base64ToBase64URL, getHashedPasswordAsync } from "../helpers/helpers";
-import { getLoginSessionIDAsync } from "../helpers/loginSession";
+import {
+  assertSafeDashboardTemplate,
+  isSameHttpsOrigin,
+} from "../helpers/networkSafety";
 import {
   getPingsAsync,
   getThisWeekPingsAsync,
@@ -19,10 +21,7 @@ const TIMEZONE_OFFSET_PLACEHOLDER = "__TIMEZONE_OFFSET__";
 const INSTALLATION_ID_PLACEHOLDER = "__INSTALLATION_ID__";
 const STUDY_ID_PLACEHOLDER = "__STUDY_ID__";
 const STUDY_VERSION_PLACEHOLDER = "__STUDY_VERSION__";
-const LOGIN_SESSION_ID_PLACEHOLDER = "__LOGIN_SESSION_ID__";
 const USERNAME_PLACEHOLDER = "__USERNAME__";
-const PASSWORD_HASH_PLACEHOLDER = "__PASSWORD_HASH__";
-const FIREBASE_ID_TOKEN_PLACEHOLDER = "__FIREBASE_ID_TOKEN__";
 const PINGS_COMPLETED_OVERALL_PLACEHOLDER = "__PINGS_COMPLETED_OVERALL__";
 const PINGS_COMPLETED_THIS_WEEK_PLACEHOLDER = "__PINGS_COMPLETED_THIS_WEEK__";
 const PINGS_COMPLETED_TODAY_PLACEHOLDER = "__PINGS_COMPLETED_TODAY__";
@@ -35,6 +34,7 @@ export async function getDashboardUrlAsync(
   }
 
   let dashboardUrl = studyInfo.dashboardURL;
+  assertSafeDashboardTemplate(dashboardUrl);
 
   if (dashboardUrl.includes(TIMEZONE_OFFSET_PLACEHOLDER)) {
     const timezoneOffset = new Date().getTimezoneOffset();
@@ -46,28 +46,21 @@ export async function getDashboardUrlAsync(
   if (dashboardUrl.includes(INSTALLATION_ID_PLACEHOLDER)) {
     dashboardUrl = dashboardUrl
       .split(INSTALLATION_ID_PLACEHOLDER)
-      .join(await getInstallationIDAsync());
+      .join(encodeURIComponent(await getInstallationIDAsync()));
   }
 
   if (dashboardUrl.includes(STUDY_ID_PLACEHOLDER)) {
-    dashboardUrl = dashboardUrl.split(STUDY_ID_PLACEHOLDER).join(studyInfo.id);
+    dashboardUrl = dashboardUrl
+      .split(STUDY_ID_PLACEHOLDER)
+      .join(encodeURIComponent(studyInfo.id));
   }
 
   if (dashboardUrl.includes(STUDY_VERSION_PLACEHOLDER)) {
     dashboardUrl = dashboardUrl
       .split(STUDY_VERSION_PLACEHOLDER)
-      .join(studyInfo.version ?? "STUDY_VERSION_NOT_SPECIFIED");
-  }
-
-  if (dashboardUrl.includes(LOGIN_SESSION_ID_PLACEHOLDER)) {
-    let loginSessionId = "N/A";
-    const user = await secureGetUserAsync();
-    if (user) {
-      loginSessionId = await getLoginSessionIDAsync(user);
-    }
-    dashboardUrl = dashboardUrl
-      .split(LOGIN_SESSION_ID_PLACEHOLDER)
-      .join(loginSessionId);
+      .join(
+        encodeURIComponent(studyInfo.version ?? "STUDY_VERSION_NOT_SPECIFIED"),
+      );
   }
 
   if (dashboardUrl.includes(USERNAME_PLACEHOLDER)) {
@@ -76,31 +69,9 @@ export async function getDashboardUrlAsync(
     if (user) {
       username = user.username;
     }
-    dashboardUrl = dashboardUrl.split(USERNAME_PLACEHOLDER).join(username);
-  }
-
-  if (dashboardUrl.includes(PASSWORD_HASH_PLACEHOLDER)) {
-    let passwordHash = "N/A";
-    const user = await secureGetUserAsync();
-    if (user) {
-      passwordHash = base64ToBase64URL(
-        await getHashedPasswordAsync(user.password),
-      );
-    }
     dashboardUrl = dashboardUrl
-      .split(PASSWORD_HASH_PLACEHOLDER)
-      .join(passwordHash);
-  }
-
-  if (dashboardUrl.includes(FIREBASE_ID_TOKEN_PLACEHOLDER)) {
-    let firebaseIdToken = "N/A";
-    if (firebaseUser !== null) {
-      firebaseIdToken = await firebaseUser.getIdToken(true);
-    }
-    // https://stackoverflow.com/a/1145525/2603230
-    dashboardUrl = dashboardUrl
-      .split(FIREBASE_ID_TOKEN_PLACEHOLDER)
-      .join(firebaseIdToken);
+      .split(USERNAME_PLACEHOLDER)
+      .join(encodeURIComponent(username));
   }
 
   if (dashboardUrl.includes(PINGS_COMPLETED_OVERALL_PLACEHOLDER)) {
@@ -125,6 +96,9 @@ export async function getDashboardUrlAsync(
       .join(`${numberOfPingsCompletedToday}`);
   }
 
+  if (!isSameHttpsOrigin(dashboardUrl, studyInfo.dashboardURL)) {
+    throw new Error("Dashboard configuration is invalid.");
+  }
   return dashboardUrl;
 }
 
@@ -136,13 +110,27 @@ const DashboardComponent: React.FunctionComponent<DashboardComponentProps> = ({
   studyInfo,
   firebaseUser,
 }) => {
+  const [failed, setFailed] = React.useState(false);
   const [url, setUrl] = React.useState<string | null>(null);
   React.useEffect(() => {
+    let active = true;
+    setUrl(null);
+    setFailed(false);
     async function setDashboardUrlAsync() {
-      const dashboardUrl = await getDashboardUrlAsync(studyInfo, firebaseUser);
-      setUrl(dashboardUrl);
+      try {
+        const dashboardUrl = await getDashboardUrlAsync(
+          studyInfo,
+          firebaseUser,
+        );
+        if (active) setUrl(dashboardUrl);
+      } catch {
+        if (active) setFailed(true);
+      }
     }
     setDashboardUrlAsync();
+    return () => {
+      active = false;
+    };
   }, [studyInfo, firebaseUser]);
 
   if (studyInfo.dashboardURL === undefined) {
@@ -155,7 +143,16 @@ const DashboardComponent: React.FunctionComponent<DashboardComponentProps> = ({
         <WebView
           source={{ uri: url }}
           cacheEnabled={false}
-          style={{width: '50%', height: 100}}
+          // Route every scheme through the callback; disallowed origins in the
+          // WebView whitelist can otherwise be handed to the external OS browser.
+          originWhitelist={["*"]}
+          onShouldStartLoadWithRequest={(request) =>
+            isSameHttpsOrigin(request.url, url)
+          }
+          mixedContentMode="never"
+          allowFileAccess={false}
+          setSupportMultipleWindows={false}
+          style={{ width: "50%", height: 100 }}
           // TODO: Use `autoManageStatusBarEnabled` after https://github.com/react-native-community/react-native-webview/pull/914 is in Expo
           // https://github.com/react-native-community/react-native-webview/issues/735#issuecomment-629073261
           onNavigationStateChange={(navState) => {
@@ -163,7 +160,11 @@ const DashboardComponent: React.FunctionComponent<DashboardComponentProps> = ({
           }}
         />
       ) : (
-        <Text style={{ textAlign: "center", fontSize: 16 }}>Loading...</Text>
+        <Text style={{ textAlign: "center", fontSize: 16 }}>
+          {failed
+            ? "Dashboard unavailable. Contact the study team."
+            : "Loading..."}
+        </Text>
       )}
     </View>
   );

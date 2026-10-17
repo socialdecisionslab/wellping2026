@@ -60,7 +60,8 @@
             "DEFAULT"
           ]
         }
-      ]
+      ],
+      "allowBackup": false
     },
     "experiments": {
       "tsconfigPaths": true

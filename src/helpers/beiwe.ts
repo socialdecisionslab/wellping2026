@@ -6,6 +6,8 @@
 import * as Device from "expo-device";
 import { Platform } from "react-native";
 
+import { getHttpsOrigin } from "./networkSafety";
+
 import { UploadData } from "./dataUploadType";
 import { JS_VERSION_NUMBER } from "./debug";
 import { base64ToBase64URL, getHashedPasswordAsync } from "./helpers";
@@ -43,7 +45,9 @@ export async function beiweLoginAsync(user: User): Promise<void> {
       user,
     });
   } catch (e) {
-    throw new Error(`Request error: ${e}.`);
+    throw new Error(
+      "Unable to sign in. Check your login details and connection.",
+    );
   }
 }
 
@@ -101,6 +105,9 @@ async function getRequestURLAsync(
 
   const studyInfo = await getStudyInfoAsync();
   const serverUrl = getBeiweServerConfig(studyInfo).serverUrl;
+  getHttpsOrigin(serverUrl);
+  // Legacy server contract: query authentication remains a deployment blocker.
+  // Do not move credentials to a new location until the server supports it.
   const query = Object.keys(request)
     .map((k) => encodeURIComponent(k) + "=" + encodeURIComponent(request[k]))
     .join("&");
@@ -132,33 +139,36 @@ async function makePostRequestAsync({
 
   //console.warn("url is " + url);
 
-  const response = await fetch(url, {
-    method: "POST",
-    headers,
-    body: JSON.stringify(body),
-  });
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+      redirect: "error",
+    });
+  } catch {
+    throw new Error("Unable to contact the study server.");
+  }
 
-  if (response.status < 200 || response.status >= 400) {
+  if (response.status < 200 || response.status >= 300) {
     if (response.status === 401 || response.status === 403) {
       throw new Error(
         throwShortError
           ? `VF${response.status}`
-          : `Verification failed.\n\nRequest: ${JSON.stringify(
-              request,
-            )}.\n\nResponse: ${JSON.stringify(response)}.`,
+          : "Verification failed. Check your login details.",
       );
     }
-
     throw new Error(
       throwShortError
         ? `OF${response.status}`
-        : `Request not successful.\n\nRequest: ${JSON.stringify(
-            request,
-          )}.\n\nResponse: ${JSON.stringify(response)}.`,
+        : "The study server could not complete the request.",
     );
   }
 
-  //console.warn(response);
-
-  return response.json();
+  try {
+    return await response.json();
+  } catch {
+    throw new Error("The study server returned an invalid response.");
+  }
 }

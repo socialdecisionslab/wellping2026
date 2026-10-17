@@ -169,13 +169,12 @@ export default class LoginScreen extends React.Component<
     let studyFileURL!: string;
     try {
       const loginCode = this.state.formData?.trim();
-      console.log('loginCode: ', loginCode)
+
       if (!loginCode) {
         throw new Error("You have not entered your login code.");
       }
 
       const parsedLoginCode = loginCode.split(CONFIG.LOGIN_CODE_SEPARATOR);
-      console.log('parsedLoginCode: ', JSON.stringify(parsedLoginCode,null,2))
 
       const loginInfo = LoginSchema.parse({
         username: parsedLoginCode[0] || "",
@@ -194,13 +193,10 @@ export default class LoginScreen extends React.Component<
     } catch (e) {
       this.setState({
         disableLoginButton: false,
-        errorText: `**Your login code is invalid**\n${e}`,
+        errorText: "Your login code is invalid. Please check it and try again.",
       });
       return;
     }
-
-    console.log('props passed to dlParseAsync', studyFileURL, JSON.stringify(user,null,2))
-
 
     this.setState({
       loadingText: "Loading study data...",
@@ -234,7 +230,7 @@ export default class LoginScreen extends React.Component<
     try {
       await loginAsync(user, survey.studyInfo);
     } catch (e) {
-      error = `${e}`;
+      error = "Unable to authenticate. Check your login code or contact the study staff.";
     }
 
     if (!error) {

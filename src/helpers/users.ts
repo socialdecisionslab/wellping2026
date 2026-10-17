@@ -1,3 +1,6 @@
+import * as Notifications from "expo-notifications";
+import { getUnuploadedPingsListAsync } from "./asyncStorage/unuploadedPingsList";
+import { getPingsAsync } from "./pings";
 import { StudyInfo } from "@wellping/study-schemas/lib/types";
 
 import { clearCurrentStudyFileAsync } from "./asyncStorage/studyFile";
@@ -36,6 +39,17 @@ export async function loginAsync(user: User, studyInfo: StudyInfo) {
 }
 
 export async function logoutAsync() {
+  // Check before authentication teardown or any deletion. Fail closed if reads fail.
+  if (await studyFileExistsAsync()) {
+    const unuploaded = await getUnuploadedPingsListAsync();
+    const pings = await getPingsAsync();
+    if (unuploaded.length > 0 || pings.some((ping) => !ping.endTime)) {
+      throw new Error("Cannot log out while responses are unsent or a survey is in progress. Complete the survey and sync before logging out. Your data has been preserved.");
+    }
+  }
+
+  await Notifications.cancelAllScheduledNotificationsAsync();
+
   if (firebaseInitialized()) {
     await firebaseLogoutAndDeleteAppAsync();
   }

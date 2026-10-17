@@ -96,7 +96,7 @@ export function validateAndInitializeFirebaseWithConfig(studyInfo: StudyInfo) {
     // Just running an arbitrary to check if the Firebase config is correct.
     const _ = getFirebaseAuth();
   } catch (e) {
-    const message = `**Firebase config object is incorrect.**\n\n${e}`;
+    const message = "Firebase configuration is invalid. Please contact study staff.";
     throw new Error(message);
   }
 }
@@ -129,7 +129,7 @@ export async function firebaseLoginAsync(
     }
     return userCredential;
   } catch (error) {
-    throw new Error(`**Login error**\n\n${error}`);
+    throw new Error("Unable to sign in. Please check your login code or contact study staff.");
   }
 }
 

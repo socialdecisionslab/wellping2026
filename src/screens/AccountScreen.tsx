@@ -44,7 +44,11 @@ const AccountScreen = ({logout, studyInfo, userInfo, navFn, showNavBar} : Accoun
           text: "Log out",
           style: "destructive",
           onPress: async () => {
-            await logout();
+            try {
+              await logout();
+            } catch (_) {
+              Alert.alert("Could not log out", "Your data has been preserved. Complete any in-progress survey and sync unsent responses, then try again. If this continues, contact the study team.");
+            }
           },
         },
       ]

@@ -179,7 +179,7 @@ class RootScreen extends React.Component<
       if (e instanceof Error) {
         downloadErrorMessage = `**${e.name}**\n${e.message}`;
       } else {
-        downloadErrorMessage = `Unknown error: ${e}`;
+        downloadErrorMessage = "Unable to load the study. Please check your connection or contact study staff.";
       }
       const errorMessage =
         `Failed to download study data! Possible network failure. ` +
@@ -286,12 +286,10 @@ class RootScreen extends React.Component<
   }
 
   async logoutFnAsync() {
-    this.setState({ userInfo: null, survey: undefined}, async () => {
-      // reset Nav to home, to make sure first screen user sees is Home
-      this.props.handleNav(0,'Home')
-      
-      await logoutAsync();
-    });
+    // Keep the active session visible if safe logout refuses pending data.
+    await logoutAsync();
+    this.setState({ userInfo: null, survey: undefined });
+    this.props.handleNav(0, 'Home');
   }
 
   render() {
@@ -402,16 +400,7 @@ class RootScreen extends React.Component<
           <Text>
             {getCriticalProblemTextForUser("this.state.survey == null")}
           </Text>
-          <Pressable 
-            onPress={async ()=> console.log(
-              await studyFileExistsAsync(),
-              'userInfo: ',userInfo,
-              'survey: ', this.state.survey,
-              (userInfo != null || userInfo != undefined)
-            )}
-            >
-            <Text>Press this to store async study file info</Text>
-          </Pressable>
+
 
         </>
       }

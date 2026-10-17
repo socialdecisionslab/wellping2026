@@ -50,7 +50,7 @@ import {
   getFuturePingsQueue,
   enqueueToFuturePingQueue,
 } from "./helpers/asyncStorage/futurePings";
-import { storePingStateAsync } from "./helpers/asyncStorage/pingState";
+import { storePingStateAsync, clearPingStateAsync } from "./helpers/asyncStorage/pingState";
 import { uploadDataAsync } from "./helpers/dataUpload";
 import {
   getNonCriticalProblemTextForUser,
@@ -64,6 +64,7 @@ import {
   NON_USER_QUESTION_TYPES,
 } from "./helpers/helpers";
 import { addEndTimeToPingAsync } from "./helpers/pings";
+import { secureGetPingAsync } from "./helpers/secureStore/ping";
 import { DataValidationFunction, QuestionScreenProps } from "./helpers/types";
 import ChoicesQuestionScreen from "./questionScreens/ChoicesQuestionScreen";
 import HowLongAgoQuestionScreen from "./questionScreens/HowLongAgoQuestion";
@@ -189,8 +190,40 @@ export default class SurveyScreen extends React.Component<
     }
   }
 
+  private savingResume = false;
+
+  private async persistResume(afterSave?: () => Promise<void> | void) {
+    this.savingResume = true;
+    try {
+      await storePingStateAsync(this.props.ping.id, { ...this.state, isInTransition: false });
+      this.savingResume = false;
+      if (afterSave) await afterSave();
+    } catch (_) {
+      this.savingResume = true;
+      Alert.alert("Survey not saved", "We could not securely save your progress. Please retry before continuing or closing the app. Your existing saved data has not been discarded.", [
+        { text: "Retry", onPress: () => { void this.persistResume(afterSave); } },
+      ], { cancelable: false });
+    }
+  }
+
+  private completionDelivered = false;
+
+  private async finishTerminalResume() {
+    if (this.state.currentQuestionData.questionId !== null || this.completionDelivered) return;
+    // The terminal snapshot and ping completion are separate durable writes.
+    // Recover if the app closed between them, without changing an existing end time.
+    const savedPing = await secureGetPingAsync(this.props.ping.id);
+    if (!savedPing) throw new Error("Cannot finish a survey whose ping is missing.");
+    const finishedPing = savedPing.endTime
+      ? savedPing
+      : await addEndTimeToPingAsync(savedPing.id, new Date());
+    await clearPingStateAsync(savedPing.id);
+    this.props.onFinish(finishedPing);
+    this.completionDelivered = true;
+  }
+
   componentDidMount() {
-    storePingStateAsync(this.props.ping.id, this.state);
+    void this.persistResume(() => this.finishTerminalResume());
   }
 
   isFormDisabled(){
@@ -596,16 +629,15 @@ export default class SurveyScreen extends React.Component<
   }
 
   goBack(questionId: string) {
-    //if startingPoint is not set, then set it as it is the first time we are going back
-    // pop the item from questions and load them
-    const prevQuestionStack = this.state.questionsStack.pop();
-    debugger;
-    if (!this.state.startingPoint) {
-      this.setState({startingPoint: questionId})
-    }
-    if (prevQuestionStack) {
-      this.setState({currentQuestionData: prevQuestionStack})
-    }
+    if (this.savingResume) return;
+    const questionsStack = [...this.state.questionsStack];
+    const previous = questionsStack.pop();
+    if (!previous) return;
+    this.setState({
+      questionsStack,
+      startingPoint: this.state.startingPoint || questionId,
+      currentQuestionData: previous,
+    }, () => { void this.persistResume(); });
   }
 
 
@@ -613,6 +645,7 @@ export default class SurveyScreen extends React.Component<
    * Goes to the next question.
    */
   onNextSelect() {
+    if (this.savingResume) return;
     // Reset this so that the new `QuestionScreen` can set it.
     this.dataValidationFunction = null;
 
@@ -621,7 +654,7 @@ export default class SurveyScreen extends React.Component<
     const questionsStack = this.state.questionsStack;
 
     const setStateCallback = () => {
-      storePingStateAsync(ping.id, this.state);
+      void this.persistResume(async () => {
 
       const {
         currentQuestionData: { questionId: currentQuestionid },
@@ -638,10 +671,9 @@ export default class SurveyScreen extends React.Component<
 
       if (currentQuestionid == null) {
         // There is no more question to answer.
-        addEndTimeToPingAsync(ping.id, new Date()).then((newPing) => {
-          this.props.onFinish(newPing);
-        });
+        await this.finishTerminalResume();
       }
+      });
     };
 
     this.setState({ isInTransition: true });
@@ -826,7 +858,6 @@ export default class SurveyScreen extends React.Component<
         if (NON_USER_QUESTION_TYPES.includes(question.type)) {
           return <></>;
         } else {
-          console.error("Cannot find the appropriate question screen!");
 
           // TODO: better error displaying.
           return <></>;
@@ -898,7 +929,7 @@ export default class SurveyScreen extends React.Component<
         }}
       >
         {/* Header */}
-        <Pressable onPress={()=>(console.log('question', JSON.stringify(question, null, 2)))} style={{width: '100%', height: 50, alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between'}}>
+        <Pressable style={{width: '100%', height: 50, alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between'}}>
           {/* Put back arrow button here in the future ⬇️ */}
           {/* <AntDesign style={{minWidth: '50%'}} name="arrowleft" size={30} color="black" /> */}
           
@@ -1077,7 +1108,7 @@ export default class SurveyScreen extends React.Component<
           {/* Temporarily removed because the participant is unable to proceed to the next Question after going back */}
           {/* <Button 
             disabled={backButtonIsDisabled()}
-            onPress={() => {this.goBack(questionId); console.log(questionId)}}
+            onPress={() => {this.goBack(questionId);}}
             accessibilityLabel="Previous question"
             title="Back"/> */}
           {/* <PaperButton disabled={this.isFormDisabled()}

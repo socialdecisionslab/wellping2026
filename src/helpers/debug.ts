@@ -97,7 +97,7 @@ export const HOME_SCREEN_DEBUG_VIEW_SYMBOLS = {
 };
 
 export function logError(error: Error | unknown) {
-  console.error(error);
+  // Never log arbitrary errors: they may contain credentials or response bodies.
 }
 
 // https://stackoverflow.com/a/49435648/2603230
@@ -109,13 +109,13 @@ export function logAndThrowError(error: Error | unknown): never {
 // Use this function for non-critical error so the user can inform the study staff.
 export function getNonCriticalProblemTextForUser(problem: string) {
   return (
-    `[INTERNAL ERROR (Please screenshot this page and send it to the study staff): ${problem}]` +
+    `[An internal error occurred. Please contact the study staff.]` +
     `\n\n[However, you may continue to complete this survey as normal.]`
   );
 }
 
 export function getCriticalProblemTextForUser(problem: string) {
-  return `[CRITICAL ERROR (Please screenshot this page and send it to the study staff as soon as possible): ${problem}]`;
+  return `[Unable to continue. Please contact the study staff.]`;
 }
 
 export async function alertWithShareButtonContainingDebugInfoAsync(
@@ -123,7 +123,7 @@ export async function alertWithShareButtonContainingDebugInfoAsync(
   title: string = "Alert",
   moreButtons: AlertButton[] = [],
 ) {
-  Alert.alert(title, text, [
+  Alert.alert("Well Ping", "An operation could not be completed. Please contact the study staff if this continues.", [
     ...moreButtons,
     {
       text: "Share Data with Research Staff",
@@ -139,13 +139,13 @@ export async function alertWithShareButtonContainingDebugInfoAsync(
 }
 
 export async function getUsefulDebugInfoAsync(): Promise<string> {
-  return JSON.stringify(await getUserInstallationInfoAsync());
+  return JSON.stringify({ jsVersion: JS_VERSION_NUMBER, nativeVersion: NATIVE_VERSION_NUMBER, nativeBuild: NATIVE_BUILD_NUMBER });
 }
 
 export async function shareDebugTextAsync(debugText: string) {
   Share.share({
     message:
       `Please enter any additional information here:\n\n\n\n` +
-      `====\n${debugText}\n\n====\n${await getUsefulDebugInfoAsync()}`,
+      `====\n${await getUsefulDebugInfoAsync()}`,
   });
 }
