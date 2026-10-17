@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/workflows/native-preview.yml'
       - 'scripts/native/**'
+      - 'scripts/simulator.entitlements'
       - 'app.config.js'
       - 'app.json'
       - 'package.json'
@@ -65,12 +66,14 @@ jobs:
       - run: corepack yarn install --immutable
       - name: Generate isolated iOS project
         run: corepack yarn expo prebuild --platform ios --no-install
+      - name: Configure simulator keychain identity
+        run: cp scripts/simulator.entitlements ios/WellPingLocal/WellPingLocal.entitlements
       - name: Install native dependencies
         working-directory: ios
         run: pod install
       - name: Build standalone simulator app
         run: |
-          xcodebuild -workspace ios/WellPingLocal.xcworkspace -scheme WellPingLocal -configuration Release -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath build/ios CODE_SIGNING_ALLOWED=NO ARCHS=arm64 ONLY_ACTIVE_ARCH=YES build > ios-build.log 2>&1 || { tail -100 ios-build.log; exit 1; }
+          xcodebuild -workspace ios/WellPingLocal.xcworkspace -scheme WellPingLocal -configuration Release -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath build/ios CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=YES ARCHS=arm64 ONLY_ACTIVE_ARCH=YES build > ios-build.log 2>&1 || { tail -100 ios-build.log; exit 1; }
       - name: Package simulator app
         run: ditto -c -k --sequesterRsrc --keepParent build/ios/Build/Products/Release-iphonesimulator/WellPingLocal.app Well-Ping-Local-Simulator.zip
       - uses: actions/upload-artifact@v4
