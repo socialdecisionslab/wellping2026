@@ -5,6 +5,13 @@ on:
     branches: [codex/modernize-mobile-runtime]
     paths:
       - '.github/workflows/native-preview.yml'
+      - 'app.config.js'
+      - 'app.json'
+      - 'package.json'
+      - 'yarn.lock'
+      - 'local/**'
+      - 'src/**'
+      - 'scripts/native/**'
       - '.github/workflows/android-smoke.yml'
       - 'scripts/smoke-android.py'
 concurrency:
