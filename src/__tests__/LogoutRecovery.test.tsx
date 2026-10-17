@@ -14,7 +14,10 @@ import {
   getVerifiedPendingLogoutAsync,
 } from "../helpers/dataJournal";
 import { getPingsAsync, insertPingAsync } from "../helpers/pings";
-import { secureStoreAnswerAsync } from "../helpers/secureStore/answer";
+import {
+  secureGetAnswerAsync,
+  secureStoreAnswerAsync,
+} from "../helpers/secureStore/answer";
 import {
   secureClearUserAsync,
   secureGetUserAsync,
@@ -200,6 +203,49 @@ test("missing credentials without a verified receipt remain recovery-only", asyn
   ).not.toHaveBeenCalled();
   expect(await getCurrentStudyFileAsync()).toEqual(savedStudy);
   expect(archivedRecords()).toEqual(records);
+});
+
+test("unsynced answer survives rejected logout and startup recovery", async () => {
+  const { ping, answer, owner } = await cleanExpiredObservation();
+  const updated = { ...answer, data: { value: ["unsynced after edit"] } };
+  await secureStoreAnswerAsync(updated, owner.id);
+  const records = archivedRecords();
+  await expect(logoutAsync()).rejects.toThrow(/unsent/);
+  const root = restart();
+  await root.componentDidMount();
+  expect(root.state.recoveryError).not.toBe(true);
+  expect(await secureGetUserAsync()).toEqual(user);
+  expect(await secureGetAnswerAsync(ping.id, answer.questionId)).toEqual(
+    updated,
+  );
+  const pending = await captureDataSnapshotAsync({ unuploadedOnly: true });
+  expect(pending.answers).toEqual([updated]);
+  expect(archivedRecords()).toEqual(records);
+});
+
+test("interrupted logout retains answers but a later participant cannot read or overwrite them", async () => {
+  const { ping, answer, owner } = await cleanExpiredObservation();
+  const records = archivedRecords();
+  (
+    Notifications.cancelAllScheduledNotificationsAsync as jest.Mock
+  ).mockRejectedValueOnce(new Error("Synthetic interruption"));
+  await expect(logoutAsync()).rejects.toThrow(/interruption/);
+  await restart().componentDidMount();
+  expect(await getVerifiedPendingLogoutAsync()).toBeNull();
+  expect(archivedRecords()).toEqual(records);
+  await storeCurrentStudyFileAsync(study);
+  await secureStoreUserAsync({
+    username: "second-participant",
+    password: "test-only-2",
+    loginDate: 2,
+  });
+  expect(await getPingsAsync()).toEqual([]);
+  expect(await secureGetAnswerAsync(ping.id, answer.questionId)).toBeNull();
+  await expect(secureStoreAnswerAsync(answer, owner.id)).rejects.toMatchObject({
+    code: "OWNER_CHANGED",
+  });
+  expect(archivedRecords()).toMatchObject(records);
+  expect((await captureDataSnapshotAsync()).answers).toEqual([]);
 });
 
 test("accepted detached answer must drain before logout checks dirty state", async () => {

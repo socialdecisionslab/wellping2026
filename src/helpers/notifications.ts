@@ -130,7 +130,7 @@ export async function setNotificationsAsync() {
 
   for (
     let date =
-      currentlySetNotifications.length === 0
+      notificationTimes.length === 0
         ? startDate
         : addDays(startDate, 1);
     date < setNotificationsUntil;
