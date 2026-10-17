@@ -16,13 +16,16 @@ import {
   storePingStateAsync,
 } from "../../helpers/asyncStorage/pingState";
 import { QuestionType } from "../../helpers/helpers";
+import { getJournalPingExpiryAsync } from "../../helpers/dataJournal";
 import { enqueueFollowupPingsOnceAsync } from "../../helpers/asyncStorage/futurePings";
 import { addEndTimeToPingAsync } from "../../helpers/pings";
 import { secureGetPingAsync } from "../../helpers/secureStore/ping";
+import { waitForPendingSurveySavesAsync } from "../../helpers/surveyAnswerWrites";
 import { PINGS, PINGS_STUDY_INFO } from "../data/pings";
 
 jest.mock("../../helpers/dataJournal", () => ({
   getDataOwnerAsync: jest.fn(async () => ({ id: "owner-a" })),
+  getJournalPingExpiryAsync: jest.fn(async () => null),
 }));
 jest.mock("../../helpers/studyFile", () => ({
   getReusableChoicesIncludeErrorAsync: jest.fn(),
@@ -62,6 +65,13 @@ async function flush() {
     await Promise.resolve();
   });
 }
+async function ready(view: ReturnType<typeof render>) {
+  await waitFor(() =>
+    expect(view.getByTestId("mainSurveyScreenView").props.pointerEvents).toBe(
+      "auto",
+    ),
+  );
+}
 function answerFor(input: Parameters<typeof insertAnswerAsync>[0]): Answer {
   const answer = AnswerSchema.parse({
     pingId: input.ping.id,
@@ -74,6 +84,7 @@ function answerFor(input: Parameters<typeof insertAnswerAsync>[0]): Answer {
   return answer;
 }
 function props(overrides: Partial<SurveyScreenProps> = {}): SurveyScreenProps {
+  if (overrides.previousState) initialResume = overrides.previousState;
   return {
     questions: {
       q1: { id: "q1", type: QuestionType.YesNo, question: "First", next: "q2" },
@@ -95,13 +106,17 @@ function props(overrides: Partial<SurveyScreenProps> = {}): SurveyScreenProps {
 }
 beforeEach(() => {
   jest.clearAllMocks();
+  jest.mocked(getJournalPingExpiryAsync).mockResolvedValue(null);
   ping = { ...PINGS[0], endTime: null };
   snapshots = [];
   initialResume = null;
   durableAnswers = {};
   jest.mocked(getPingStateAsync).mockImplementation(async () => {
     const resume = snapshots.at(-1) ?? initialResume;
-    if (!resume) throw new Error("No synthetic resume exists.");
+    if (!resume)
+      throw Object.assign(new Error("No synthetic resume exists."), {
+        code: "MISSING_RESUME_STATE",
+      });
     return { ...resume, answers: { ...resume.answers, ...durableAnswers } };
   });
   insert.mockImplementation(async (input) => answerFor(input));
@@ -130,7 +145,7 @@ test("Next waits for rapid inputs in order and the destination's durable snapsho
     snapshots.push(state);
   });
   const view = render(<SurveyScreen {...props()} />);
-  await flush();
+  await ready(view);
   fireEvent.press(view.getByLabelText("select Yes"));
   fireEvent.press(view.getByLabelText("select No"));
   fireEvent.press(view.getByLabelText("Next question"));
@@ -158,7 +173,7 @@ test("Next waits for rapid inputs in order and the destination's durable snapsho
 
 test("input snapshots are durable without navigating, so interruption can restore the selection", async () => {
   const first = render(<SurveyScreen {...props()} />);
-  await flush();
+  await ready(first);
   fireEvent.press(first.getByLabelText("select No"));
   await waitFor(() =>
     expect(snapshots.at(-1)?.answers.q1.data).toEqual({ value: false }),
@@ -166,7 +181,7 @@ test("input snapshots are durable without navigating, so interruption can restor
   const saved = snapshots.at(-1)!;
   first.unmount();
   const second = render(<SurveyScreen {...props({ previousState: saved })} />);
-  await flush();
+  await ready(second);
   expect(second.getByLabelText("select No").props.style.backgroundColor).toBe(
     "#b3995d",
   );
@@ -177,7 +192,7 @@ test("recoverable input failure blocks navigation and Retry saves the same captu
   const alert = jest.spyOn(Alert, "alert").mockImplementation(() => {});
   insert.mockRejectedValueOnce(new Error("disk temporarily unavailable"));
   const view = render(<SurveyScreen {...props()} />);
-  await flush();
+  await ready(view);
   fireEvent.press(view.getByLabelText("select Yes"));
   fireEvent.press(view.getByLabelText("Next question"));
   await waitFor(() => expect(alert).toHaveBeenCalledTimes(1));
@@ -206,7 +221,7 @@ test("resume-save failure retries only the snapshot and cannot expose the next q
     snapshots.push(state);
   });
   const view = render(<SurveyScreen {...props()} />);
-  await flush();
+  await ready(view);
   fireEvent.press(view.getByLabelText("select Yes"));
   fireEvent.press(view.getByLabelText("Next question"));
   await waitFor(() => expect(alert).toHaveBeenCalledTimes(1));
@@ -230,7 +245,7 @@ test.each(["Prefer not to answer the current question", "Skip this question"])(
     const p = props();
     p.questions.q1.extraCustomNextWithoutAnsweringButton = "Skip this question";
     const view = render(<SurveyScreen {...p} />);
-    await flush();
+    await ready(view);
     fireEvent.press(view.getByLabelText("select Yes"));
     fireEvent.press(view.getByLabelText(button));
     fireEvent.press(view.getByLabelText(button));
@@ -257,7 +272,7 @@ test("closing during a pending write drains accepted answers but cancels navigat
   });
   const p = props();
   const view = render(<SurveyScreen {...p} />);
-  await flush();
+  await ready(view);
   fireEvent.press(view.getByLabelText("select Yes"));
   fireEvent.press(view.getByLabelText("select No"));
   fireEvent.press(view.getByLabelText("Next question"));
@@ -284,7 +299,7 @@ test("closing a failed save drains the accepted answer once and ignores stale Re
   const alert = jest.spyOn(Alert, "alert").mockImplementation(() => {});
   insert.mockRejectedValueOnce(new Error("temporarily unavailable"));
   const view = render(<SurveyScreen {...props()} />);
-  await flush();
+  await ready(view);
   fireEvent.press(view.getByLabelText("select Yes"));
   await waitFor(() => expect(alert).toHaveBeenCalled());
   const retry = alert.mock.calls[0][2]![0].onPress!;
@@ -331,7 +346,7 @@ test("expanded IDs and mutable input belong to the event, and repeated questions
       })}
     />,
   );
-  await flush();
+  await ready(view);
   const input = { value: ["original"] };
   let save!: Promise<void>;
   act(() => {
@@ -366,7 +381,7 @@ test("terminal completion waits for the terminal snapshot and retries without a 
     },
   });
   const view = render(<SurveyScreen {...p} />);
-  await flush();
+  await ready(view);
   fireEvent.press(view.getByLabelText("select Yes"));
   fireEvent.press(view.getByLabelText("Next question"));
   await flush();
@@ -378,6 +393,7 @@ test("terminal completion waits for the terminal snapshot and retries without a 
   });
   expect(finish).toHaveBeenCalledTimes(1);
   expect(finish.mock.calls[0][2]).toBe("owner-a");
+  expect(secureGetPingAsync).toHaveBeenCalledWith(ping.id, "owner-a");
   expect(p.onFinish).not.toHaveBeenCalled();
   const endTime = ping.endTime;
   await act(async () => {
@@ -399,9 +415,14 @@ test("restored terminal snapshot completes once without rewriting existing end t
     },
   });
   render(<SurveyScreen {...p} />);
-  await flush();
+  await waitFor(() => expect(p.onFinish).toHaveBeenCalledWith(ping));
   expect(finish).not.toHaveBeenCalled();
   expect(clear).toHaveBeenCalledTimes(1);
+  expect(clear).toHaveBeenCalledWith(ping.id, "owner-a");
+  expect(getPingStateAsync).toHaveBeenCalledWith(ping.id, "owner-a");
+  expect(store.mock.calls.every(([, , owner]) => owner === "owner-a")).toBe(
+    true,
+  );
   expect(p.onFinish).toHaveBeenCalledWith(ping);
 });
 
@@ -419,7 +440,7 @@ test("followup scheduling is awaited as one stable retryable pair before navigat
     addFollowupStream: { yes: "followup" },
   } as typeof p.questions.q1;
   const view = render(<SurveyScreen {...p} />);
-  await flush();
+  await ready(view);
   fireEvent.press(view.getByLabelText("select Yes"));
   fireEvent.press(view.getByLabelText("Next question"));
   await waitFor(() => expect(alert).toHaveBeenCalledTimes(1));
@@ -430,7 +451,8 @@ test("followup scheduling is awaited as one stable retryable pair before navigat
   expect(view.getByTestId("questionTitle").props.children).toBe("First");
   expect(followups).toHaveBeenCalledTimes(2);
   expect(followups.mock.calls[1]).toEqual(followups.mock.calls[0]);
-  const [operationId, pair] = followups.mock.calls[0];
+  const [operationId, pair, ownerId] = followups.mock.calls[0];
+  expect(ownerId).toBe("owner-a");
   expect(JSON.parse(operationId)).toEqual([ping.id, "q1", "followup"]);
   expect(pair).toHaveLength(2);
   expect(pair.map((item) => item.streamName)).toEqual(["followup", "followup"]);
@@ -447,7 +469,7 @@ test("followup scheduling is awaited as one stable retryable pair before navigat
 test("cancelled validation does not write or navigate", async () => {
   const ref = React.createRef<SurveyScreen>();
   const view = render(<SurveyScreen ref={ref} {...props()} />);
-  await flush();
+  await ready(view);
   ref.current!.dataValidationFunction = () => false;
   fireEvent.press(view.getByLabelText("Next question"));
   await flush();
@@ -468,7 +490,7 @@ test("text immediately followed by Next is saved before navigation without a tim
     next: "q2",
   };
   const view = render(<SurveyScreen {...p} />);
-  await flush();
+  await ready(view);
   act(() => {
     fireEvent.changeText(view.getByLabelText("text input 0"), "first value");
     fireEvent.changeText(view.getByLabelText("text input 1"), "second value");
@@ -503,7 +525,7 @@ test("dropdown selection immediately followed by Next is not deferred or discard
     },
   };
   const view = render(<SurveyScreen {...p} />);
-  await flush();
+  await ready(view);
   fireEvent(view.getByLabelText("text input 0"), "focus");
   act(() => {
     fireEvent.press(view.getByText("Choice B"));
@@ -522,7 +544,7 @@ test("callbacks retained from an earlier question cannot write or navigate the n
   const ref = React.createRef<SurveyScreen>();
   const p = props();
   const view = render(<SurveyScreen ref={ref} {...p} />);
-  await flush();
+  await ready(view);
   fireEvent.press(view.getByLabelText("select Yes"));
   fireEvent.press(view.getByLabelText("Next question"));
   await flush();
@@ -550,7 +572,7 @@ test("same-batch multi-choice toggles retain both values before immediate Next",
     next: "q2",
   };
   const view = render(<SurveyScreen {...p} />);
-  await flush();
+  await ready(view);
   act(() => {
     fireEvent.press(view.getByLabelText("select A"));
     fireEvent.press(view.getByLabelText("select B"));
@@ -576,7 +598,7 @@ test("same-batch how-long-ago choices retain both columns before immediate Next"
     next: "q2",
   };
   const view = render(<SurveyScreen {...p} />);
-  await flush();
+  await ready(view);
   act(() => {
     fireEvent.press(view.getByLabelText("select 2"));
     fireEvent.press(view.getByLabelText("select days"));
@@ -630,7 +652,7 @@ test.each(["Prefer not to answer the current question", "Skip this question"])(
     p.questions.q1.extraCustomNextWithoutAnsweringButton = "Skip this question";
     const ref = React.createRef<SurveyScreen>();
     const view = render(<SurveyScreen ref={ref} {...p} />);
-    await flush();
+    await ready(view);
     const instance = ref.current!;
     fireEvent.press(view.getByLabelText("select Yes"));
     fireEvent.press(view.getByLabelText(button));
@@ -656,47 +678,273 @@ test.each(["Prefer not to answer the current question", "Skip this question"])(
   },
 );
 
-test("immediate same-ping remount waits for old accepted answers and hydrates before new edits", async () => {
+test.each([true, false])(
+  "immediate same-ping remount waits and hydrates accepted answers (previous snapshot supplied: %s)",
+  async (supplySnapshot) => {
+    const gate = deferred();
+    insert.mockImplementationOnce(async (input) => {
+      await gate.promise;
+      return answerFor(input);
+    });
+    const first = render(<SurveyScreen {...props()} />);
+    await ready(first);
+    fireEvent.press(first.getByLabelText("select Yes"));
+    fireEvent.press(first.getByLabelText("select No"));
+    await flush();
+    const staleSnapshot = snapshots.at(-1)!;
+    first.unmount();
+    const second = render(
+      <SurveyScreen
+        {...props({ previousState: supplySnapshot ? staleSnapshot : null })}
+      />,
+    );
+    await flush();
+    expect(second.getByTestId("mainSurveyScreenView").props.pointerEvents).toBe(
+      "none",
+    );
+    expect(insert).toHaveBeenCalledTimes(1);
+    expect(store).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      gate.resolve();
+    });
+    expect(insert).toHaveBeenCalledTimes(2);
+    expect(second.getByTestId("mainSurveyScreenView").props.pointerEvents).toBe(
+      "auto",
+    );
+    expect(second.getByLabelText("select No").props.style.backgroundColor).toBe(
+      "#b3995d",
+    );
+    expect(snapshots.at(-1)?.answers.q1.data).toEqual({ value: false });
+    fireEvent.press(second.getByLabelText("select Yes"));
+    await flush();
+    expect(insert.mock.calls.map(([input]) => input.data)).toEqual([
+      { value: true },
+      { value: false },
+      { value: true },
+    ]);
+    expect(durableAnswers.q1.data).toEqual({ value: true });
+    expect(snapshots.at(-1)?.answers.q1.data).toEqual({ value: true });
+    expect(finish).not.toHaveBeenCalled();
+  },
+);
+
+test("expired late input stops navigation without poisoning earlier accepted-save drains", async () => {
+  const alert = jest.spyOn(Alert, "alert").mockImplementation(() => {});
+  const ref = React.createRef<SurveyScreen>();
+  const p = props();
+  const view = render(<SurveyScreen ref={ref} {...p} />);
+  await ready(view);
+  fireEvent.press(view.getByLabelText("select Yes"));
+  await flush();
+  insert.mockRejectedValueOnce(
+    Object.assign(new Error("expired"), { code: "PING_EXPIRED" }),
+  );
+  fireEvent.press(view.getByLabelText("select No"));
+  fireEvent.press(view.getByLabelText("Next question"));
+  await flush();
+  expect(alert).toHaveBeenCalledTimes(1);
+  expect(alert.mock.calls[0][0]).toBe("Survey window ended");
+  expect(alert.mock.calls[0][1]).toContain(
+    "earlier saved responses have been preserved",
+  );
+  expect(alert.mock.calls[0][2]!.map((button) => button.text)).toEqual(["OK"]);
+  expect(snapshots.at(-1)?.answers.q1.data).toEqual({ value: true });
+  expect(view.getByTestId("questionTitle").props.children).toBe("First");
+  expect(view.getByTestId("mainSurveyScreenView").props.pointerEvents).toBe(
+    "none",
+  );
+  await act(async () => {
+    await ref.current!.addAnswerToAnswersListAsync(p.questions.q1, {
+      data: { value: true },
+    });
+    ref.current!.onNextSelect();
+    await waitForPendingSurveySavesAsync();
+  });
+  expect(insert).toHaveBeenCalledTimes(2);
+  expect(finish).not.toHaveBeenCalled();
+  expect(p.onFinish).not.toHaveBeenCalled();
+});
+
+test("an expired event rejected after unmount does not leave a permanent failed drain", async () => {
+  const gate = deferred();
+  const alert = jest.spyOn(Alert, "alert").mockImplementation(() => {});
+  insert.mockImplementationOnce(async () => {
+    await gate.promise;
+    throw Object.assign(new Error("expired"), { code: "PING_EXPIRED" });
+  });
+  const view = render(<SurveyScreen {...props()} />);
+  await ready(view);
+  fireEvent.press(view.getByLabelText("select Yes"));
+  await flush();
+  view.unmount();
+  await act(async () => {
+    gate.resolve();
+    await waitForPendingSurveySavesAsync();
+  });
+  expect(insert).toHaveBeenCalledTimes(1);
+  expect(store).toHaveBeenCalledTimes(1);
+  expect(alert).not.toHaveBeenCalled();
+});
+
+test("owner mismatch is not retried into another session or silently discarded", async () => {
+  const alert = jest.spyOn(Alert, "alert").mockImplementation(() => {});
+  insert.mockRejectedValue(
+    Object.assign(new Error("owner changed"), { code: "OWNER_CHANGED" }),
+  );
+  const view = render(<SurveyScreen {...props()} />);
+  await ready(view);
+  fireEvent.press(view.getByLabelText("select Yes"));
+  fireEvent.press(view.getByLabelText("Next question"));
+  await flush();
+  expect(insert).toHaveBeenCalledTimes(1);
+  expect(alert.mock.calls[0][0]).toBe("Survey needs recovery");
+  expect(view.getByTestId("questionTitle").props.children).toBe("First");
+  view.unmount();
+  await expect(waitForPendingSurveySavesAsync()).rejects.toMatchObject({
+    code: "OWNER_CHANGED",
+  });
+  expect(
+    insert.mock.calls.every(([input]) => input.expectedOwnerId === "owner-a"),
+  ).toBe(true);
+  // Simulate recovery of the original owner; no queued value is lost.
+  insert.mockImplementation(async (input) => answerFor(input));
+  await waitForPendingSurveySavesAsync();
+  expect(durableAnswers.q1.data).toEqual({ value: true });
+  expect(store).toHaveBeenCalledTimes(1);
+});
+
+test("terminal completion preserves final Next event time across storage delay and restart", async () => {
+  const gate = deferred();
+  const p = props({
+    questions: {
+      q1: { id: "q1", type: QuestionType.YesNo, question: "Last", next: null },
+    },
+  });
+  store.mockImplementation(async (_, state) => {
+    snapshots.push(state);
+    if (state.currentQuestionData.questionId === null) await gate.promise;
+  });
+  const view = render(<SurveyScreen {...p} />);
+  await ready(view);
+  fireEvent.press(view.getByLabelText("select Yes"));
+  fireEvent.press(view.getByLabelText("Next question"));
+  await flush();
+  const terminal = snapshots.at(-1)!;
+  const event =
+    terminal.currentQuestionData.extraData.__wellpingCompletionEvent;
+  expect(event).toMatchObject({
+    version: 1,
+    ownerId: "owner-a",
+    pingId: ping.id,
+    questionId: "q1",
+  });
+  expect(finish).not.toHaveBeenCalled();
+  view.unmount();
+  await act(async () => {
+    gate.resolve();
+  });
+  render(<SurveyScreen {...props({ ...p, previousState: terminal })} />);
+  await flush();
+  expect(finish).toHaveBeenCalledTimes(1);
+  expect(finish.mock.calls[0][1].toISOString()).toBe(event.requestedAt);
+  expect(p.onFinish).toHaveBeenCalledTimes(1);
+});
+
+test.each([
+  { requestedAt: "not-a-date" },
+  { requestedAt: "2999-01-01T00:00:00.000Z" },
+  { requestedAt: "1999-01-01T00:00:00.000Z" },
+  { ownerId: "another-owner" },
+  { pingId: "another-ping" },
+  { questionId: "unknown-question" },
+])(
+  "terminal recovery refuses an unverified completion event: %p",
+  async (invalid) => {
+    const alert = jest.spyOn(Alert, "alert").mockImplementation(() => {});
+    const p = props({
+      previousState: {
+        currentQuestionData: {
+          questionId: null,
+          extraData: {
+            __wellpingCompletionEvent: {
+              version: 1,
+              ownerId: "owner-a",
+              pingId: ping.id,
+              questionId: "q1",
+              requestedAt: new Date().toISOString(),
+              ...invalid,
+            },
+          },
+        },
+        nextQuestionsDataStack: [],
+        answers: {},
+        isInTransition: false,
+      },
+    });
+    render(<SurveyScreen {...p} />);
+    await flush();
+    expect(finish).not.toHaveBeenCalled();
+    expect(clear).not.toHaveBeenCalled();
+    expect(p.onFinish).not.toHaveBeenCalled();
+    expect(alert).toHaveBeenCalledTimes(1);
+    expect(alert.mock.calls[0][0]).toBe("Survey needs recovery");
+  },
+);
+
+test("persisted expiry allows the exact deadline, rejects the next millisecond, and drains earlier input", async () => {
+  const deadline = new Date("2026-01-01T00:00:00.000Z");
+  jest.mocked(getJournalPingExpiryAsync).mockResolvedValue(deadline);
+  const alert = jest.spyOn(Alert, "alert").mockImplementation(() => {});
   const gate = deferred();
   insert.mockImplementationOnce(async (input) => {
     await gate.promise;
     return answerFor(input);
   });
-  const first = render(<SurveyScreen {...props()} />);
+  const ref = React.createRef<SurveyScreen>();
+  const p = props();
+  const view = render(<SurveyScreen ref={ref} {...p} />);
+  await ready(view);
+  expect(getJournalPingExpiryAsync).toHaveBeenCalledWith(ping.id, "owner-a");
+  act(() => {
+    void ref.current!.addAnswerToAnswersListAsync(p.questions.q1, {
+      data: { value: true },
+      date: deadline,
+    });
+    void ref.current!.addAnswerToAnswersListAsync(p.questions.q1, {
+      data: { value: false },
+      date: new Date(deadline.getTime() + 1),
+    });
+  });
   await flush();
-  fireEvent.press(first.getByLabelText("select Yes"));
-  fireEvent.press(first.getByLabelText("select No"));
-  await flush();
-  const staleSnapshot = snapshots.at(-1)!;
-  first.unmount();
-  const second = render(
-    <SurveyScreen {...props({ previousState: staleSnapshot })} />,
-  );
-  await flush();
-  expect(second.getByTestId("mainSurveyScreenView").props.pointerEvents).toBe(
-    "none",
-  );
   expect(insert).toHaveBeenCalledTimes(1);
-  expect(store).toHaveBeenCalledTimes(1);
+  expect(insert.mock.calls[0][0].date.getTime()).toBe(deadline.getTime());
+  expect(alert.mock.calls[0][0]).toBe("Survey window ended");
+  view.unmount();
   await act(async () => {
     gate.resolve();
+    await waitForPendingSurveySavesAsync();
   });
-  expect(insert).toHaveBeenCalledTimes(2);
-  expect(second.getByTestId("mainSurveyScreenView").props.pointerEvents).toBe(
-    "auto",
-  );
-  expect(second.getByLabelText("select No").props.style.backgroundColor).toBe(
-    "#b3995d",
-  );
-  expect(snapshots.at(-1)?.answers.q1.data).toEqual({ value: false });
-  fireEvent.press(second.getByLabelText("select Yes"));
-  await flush();
-  expect(insert.mock.calls.map(([input]) => input.data)).toEqual([
-    { value: true },
-    { value: false },
-    { value: true },
-  ]);
   expect(durableAnswers.q1.data).toEqual({ value: true });
-  expect(snapshots.at(-1)?.answers.q1.data).toEqual({ value: true });
-  expect(finish).not.toHaveBeenCalled();
+  expect(store).toHaveBeenCalledTimes(1);
 });
+
+test.each(["next", "skip", "preferNotToAnswer"] as const)(
+  "an expired %s event does not enter the accepted-save or navigation lane",
+  async (mode) => {
+    jest.mocked(getJournalPingExpiryAsync).mockResolvedValue(new Date(0));
+    const alert = jest.spyOn(Alert, "alert").mockImplementation(() => {});
+    const ref = React.createRef<SurveyScreen>();
+    const p = props();
+    render(<SurveyScreen ref={ref} {...p} />);
+    await flush();
+    await act(async () => {
+      ref.current!.onNextSelect(mode);
+      await waitForPendingSurveySavesAsync();
+    });
+    expect(insert).not.toHaveBeenCalled();
+    expect(store).toHaveBeenCalledTimes(1);
+    expect(finish).not.toHaveBeenCalled();
+    expect(p.onFinish).not.toHaveBeenCalled();
+    expect(alert.mock.calls[0][0]).toBe("Survey window ended");
+  },
+);

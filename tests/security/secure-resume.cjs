@@ -129,6 +129,20 @@ function fixture({ local = false } = {}) {
       },
     },
     "../dataJournal": {
+      DataRecoveryError: class extends Error {
+        constructor(code) {
+          super(code);
+          this.code = code;
+        }
+      },
+      async withOpenDataSessionAsync(expectedOwnerId, operation) {
+        if (!user || expectedOwnerId !== hash(JSON.stringify(user)))
+          throw Error("Owner changed");
+        return operation();
+      },
+      async getJournalPingIdsAsync() {
+        return ["p"];
+      },
       async captureCurrentDataOwnerAsync() {
         if (!user) throw Error("No owner");
         return {
@@ -595,6 +609,27 @@ async function legacyQuarantine() {
   );
 }
 async function resumeBehavior() {
+  const fenced = fixture();
+  fenced.plain.set(
+    fenced.sourceKey,
+    "unowned legacy data must remain untouched",
+  );
+  const fencedResume = fenced.boot().resume;
+  for (const operation of [
+    () => fencedResume.getPingStateAsync("p", "old-owner"),
+    () => fencedResume.storePingStateAsync("p", state, "old-owner"),
+    () => fencedResume.clearPingStateAsync("p", "old-owner"),
+  ]) {
+    await assert.rejects(
+      operation(),
+      (error) => error.code === "OWNER_CHANGED",
+    );
+    assert.equal(
+      fenced.events.length,
+      0,
+      "owner mismatch precedes resume/quarantine mutations",
+    );
+  }
   const f = fixture();
   let { resume, quarantine, chunks } = f.boot();
   await assert.rejects(
@@ -701,35 +736,65 @@ async function resumeBehavior() {
   let pending = ["p"],
     pings = [],
     deleted = 0,
-    auth = 0;
+    auth = 0,
+    expired = false,
+    failActivityRead = false,
+    pendingClose = null;
+  const owner = {
+    id: "synthetic-owner",
+    studyId: "synthetic-study",
+    secureNamespace: "synthetic.",
+  };
+  class DataRecoveryError extends Error {
+    constructor(code) {
+      super(code);
+      this.code = code;
+    }
+  }
   const users = load("src/helpers/users.ts", {
-    "./asyncStorage/unuploadedPingsList": {
-      async getUnuploadedPingsListAsync() {
-        return pending;
+    "./dataJournal": {
+      DataRecoveryError,
+      async getVerifiedPendingLogoutAsync() {
+        return pendingClose;
+      },
+      async closeDataSessionAsync() {
+        if (failActivityRead) throw Error("activity unavailable");
+        if (pending.length)
+          throw new DataRecoveryError("PENDING_RESEARCH_DATA");
+        if (pings.some((ping) => ping.endTime === null && !expired))
+          throw new DataRecoveryError("ACTIVE_RESEARCH_DATA");
+        pendingClose = owner;
+        return owner;
+      },
+      async completeDataLogoutAsync(handle) {
+        assert.equal(handle, owner);
+        pendingClose = null;
       },
     },
-    "./pings": {
-      async getPingsAsync() {
-        return pings;
+    "./surveyAnswerWrites": { async waitForPendingSurveySavesAsync() {} },
+    "@react-native-async-storage/async-storage": {
+      default: {
+        async removeItem() {
+          deleted++;
+        },
+        async getItem() {
+          return null;
+        },
       },
+    },
+    "./asyncStorage/asyncStorageConfig": {
+      ASYNC_STORAGE_WELLPING_PREFIX: "synthetic:",
     },
     "./asyncStorage/studyFile": {
       async clearCurrentStudyFileAsync() {
         deleted++;
       },
-    },
-    "./asyncStorage/tempStudyFile": {
-      async clearTempStudyFileAsync() {
-        deleted++;
+      async getCurrentStudyFileAsync() {
+        return null;
       },
     },
     "expo-notifications": { async cancelAllScheduledNotificationsAsync() {} },
     "./beiwe": {},
-    "./cleanup": {
-      async clearAllPingsAndAnswersAsync() {
-        deleted++;
-      },
-    },
     "./firebase": {
       firebaseInitialized() {
         return true;
@@ -739,34 +804,58 @@ async function resumeBehavior() {
       },
     },
     "./secureStore/user": {
-      async secureClearUserAsync() {
+      async secureClearUserAsync(handle) {
+        assert.equal(handle, owner);
         deleted++;
       },
     },
     "./server": {},
-    "./studyFile": {
-      async studyFileExistsAsync() {
-        return true;
-      },
-    },
   });
   await assert.rejects(users.logoutAsync());
   assert.equal(deleted, 0);
   assert.equal(auth, 0);
   pending = [];
-  pings = [{ endTime: null }];
+  pings = [{ id: "synthetic-ping", endTime: null }];
   await assert.rejects(users.logoutAsync());
   assert.equal(deleted, 0);
-  pings = [{ endTime: new Date() }];
+  assert.equal(auth, 0);
+  failActivityRead = true;
+  await assert.rejects(users.logoutAsync(), /activity unavailable/);
+  assert.equal(
+    deleted,
+    0,
+    "an unreadable activity guard cannot permit cleanup",
+  );
+  assert.equal(auth, 0);
+  failActivityRead = false;
+  pings = [{ id: "synthetic-ping", endTime: new Date() }];
   await users.logoutAsync();
   assert.equal(auth, 1);
   assert.equal(
     deleted,
-    3,
+    4,
     "logout keeps owner-isolated encrypted research records",
   );
+  pings = [{ id: "synthetic-expired-ping", endTime: null }];
+  expired = true;
+  await users.logoutAsync();
+  assert.equal(
+    auth,
+    2,
+    "an expired archived ping does not trap the old session",
+  );
+  assert.equal(
+    deleted,
+    8,
+    "logout removes scheduling/session/config only, not research records",
+  );
+  assert.equal(
+    pings[0].endTime,
+    null,
+    "expiration never fabricates completion",
+  );
   console.log(
-    "PASS: fail-closed logout preserves pending and unfinished records.",
+    "PASS: fail-closed logout preserves pending/active records and activity errors; expired archived records remain incomplete.",
   );
 })().catch((error) => {
   console.error(error);
@@ -778,27 +867,44 @@ async function resumeBehavior() {
   let savedPing = { id: "terminal", endTime: null },
     completed = 0,
     endWrites = 0,
+    endAttempts = 0,
     clears = 0,
+    snapshotWrites = 0,
     retry;
-  let failEnd = true;
+  const ownerId = "synthetic-owner";
+  const clone = (value) => JSON.parse(JSON.stringify(value));
+  const terminal = {
+    ...state,
+    currentQuestionData: { questionId: null, extraData: {} },
+    answers: { q: { ...state.answers.q, pingId: "terminal" } },
+  };
+  let savedResume = clone(terminal);
+  let failSnapshot = true,
+    failEnd = true;
   const stubs = {
     "lodash/cloneDeepWith": { default: require("lodash/cloneDeepWith") },
-    "lodash/cloneDeep": {
-      default: (value) => JSON.parse(JSON.stringify(value)),
-    },
+    "lodash/cloneDeep": { default: clone },
     react: {
       default: {
         Component: class {
           constructor(props) {
             this.props = props;
           }
+          setState(update, callback) {
+            const next =
+              typeof update === "function"
+                ? update(this.state, this.props)
+                : update;
+            this.state = { ...this.state, ...next };
+            if (callback) callback();
+          }
         },
       },
     },
     "react-native": {
       StyleSheet: {
-        create(v) {
-          return v;
+        create(value) {
+          return value;
         },
       },
       Dimensions: {
@@ -812,20 +918,68 @@ async function resumeBehavior() {
         },
       },
     },
+    "./helpers/dataJournal": {
+      async getDataOwnerAsync() {
+        return { id: ownerId };
+      },
+      async getJournalPingExpiryAsync(id, expectedOwnerId) {
+        assert.equal(id, savedPing.id);
+        assert.equal(expectedOwnerId, ownerId);
+        return null;
+      },
+    },
+    "./helpers/surveyAnswerWrites": {
+      async waitForSurveyAnswerSavesAsync(expectedOwnerId, id) {
+        assert.equal(expectedOwnerId, ownerId);
+        assert.equal(id, savedPing.id);
+        return false;
+      },
+    },
     "./helpers/asyncStorage/pingState": {
-      async storePingStateAsync() {},
-      async clearPingStateAsync() {
+      async getPingStateAsync(id, expectedOwnerId) {
+        assert.equal(id, savedPing.id);
+        assert.equal(expectedOwnerId, ownerId);
+        assert(
+          savedResume,
+          "startup rereads an actual surviving resume record",
+        );
+        return clone(savedResume);
+      },
+      async storePingStateAsync(id, value, expectedOwnerId) {
+        assert.equal(id, savedPing.id);
+        assert.equal(expectedOwnerId, ownerId);
+        if (failSnapshot) throw Error("snapshot disk full");
+        snapshotWrites++;
+        savedResume = clone(value);
+      },
+      async clearPingStateAsync(id, expectedOwnerId) {
+        assert.equal(id, savedPing.id);
+        assert.equal(expectedOwnerId, ownerId);
+        assert(
+          savedPing.endTime,
+          "terminal resume cannot be removed before durable completion",
+        );
         clears++;
+        savedResume = null;
       },
     },
     "./helpers/secureStore/ping": {
-      async secureGetPingAsync() {
+      async secureGetPingAsync(id, expectedOwnerId) {
+        assert.equal(id, savedPing.id);
+        assert.equal(expectedOwnerId, ownerId);
         return savedPing;
       },
     },
     "./helpers/pings": {
-      async addEndTimeToPingAsync(_id, date) {
-        if (failEnd) throw Error("disk full");
+      async addEndTimeToPingAsync(id, date, expectedOwnerId) {
+        assert.equal(id, savedPing.id);
+        assert.equal(
+          expectedOwnerId,
+          ownerId,
+          "completion remains bound to the mounting owner",
+        );
+        endAttempts++;
+        if (failEnd) throw Error("completion disk full");
         endWrites++;
         savedPing = { ...savedPing, endTime: date };
         return savedPing;
@@ -845,50 +999,81 @@ async function resumeBehavior() {
   ).outputText;
   vm.runInNewContext(source, {
     exports,
-    require(k) {
-      return stubs[k] || {};
+    require(key) {
+      return stubs[key] || {};
     },
     Date,
     console,
   });
-  const terminal = { ...state, currentQuestionData: { questionId: null } };
-  const screen = new exports.default({
-    previousState: terminal,
+  async function waitUntil(predicate, description) {
+    for (let attempt = 0; attempt < 100; attempt++) {
+      if (predicate()) return;
+      await new Promise(setImmediate);
+    }
+    assert.fail(`Timed out waiting for ${description}`);
+  }
+  const props = () => ({
+    previousState: clone(terminal),
     ping: savedPing,
+    questions: {},
     onFinish() {
       completed++;
     },
   });
+  const screen = new exports.default(props());
   screen.componentDidMount();
-  await new Promise(setImmediate);
+  await waitUntil(() => typeof retry === "function", "initial snapshot retry");
   assert.equal(completed, 0);
   assert.equal(clears, 0);
-  assert.equal(typeof retry, "function");
+  assert.equal(
+    endAttempts,
+    0,
+    "completion is gated on verified initial snapshot readiness",
+  );
+  assert.equal(snapshotWrites, 0);
+  failSnapshot = false;
+  const retrySnapshot = retry;
+  retry = undefined;
+  retrySnapshot();
+  await waitUntil(
+    () => typeof retry === "function",
+    "terminal completion retry",
+  );
+  assert.equal(snapshotWrites, 1);
+  assert.equal(endAttempts, 1);
+  assert.equal(completed, 0);
+  assert.equal(clears, 0, "failed completion preserves terminal resume");
+  assert(savedResume);
   failEnd = false;
   retry();
-  await new Promise(setImmediate);
-  assert.equal(completed, 1);
+  await waitUntil(() => completed === 1, "terminal completion after retry");
   assert.equal(endWrites, 1);
   assert.equal(clears, 1);
+  assert.equal(savedResume, null);
   await screen.finishTerminalResume();
   assert.equal(completed, 1, "completion is idempotent in mounted instance");
+  assert.equal(clears, 1);
+  screen.componentWillUnmount();
   const priorEnd = savedPing.endTime;
-  const restarted = new exports.default({
-    previousState: terminal,
-    ping: savedPing,
-    onFinish() {
-      completed++;
-    },
-  });
+  // Independent crash checkpoint: endTime committed but terminal cleanup did not.
+  savedResume = clone(terminal);
+  const restarted = new exports.default(props());
   restarted.componentDidMount();
-  await new Promise(setImmediate);
-  assert.equal(endWrites, 1, "existing end time must not be rewritten");
-  assert.equal(savedPing.endTime, priorEnd);
-  assert.equal(completed, 2);
-  console.log(
-    "PASS: terminal snapshot remount recovery, failed completion retry, existing end-time preservation.",
+  await waitUntil(
+    () => completed === 2,
+    "remount with existing durable end time",
   );
-})().catch((e) => {
-  console.error(e);
+  assert.equal(endWrites, 1, "existing end time must not be rewritten");
+  assert.equal(endAttempts, 2, "remount skips completion mutation entirely");
+  assert.equal(savedPing.endTime, priorEnd);
+  assert.equal(snapshotWrites, 2);
+  assert.equal(clears, 2);
+  assert.equal(savedResume, null);
+  restarted.componentWillUnmount();
+  console.log(
+    "PASS: initial snapshot readiness, owner-bound terminal remount recovery, failed completion retry, existing end-time preservation.",
+  );
+})().catch((error) => {
+  console.error(error);
   process.exitCode = 1;
 });

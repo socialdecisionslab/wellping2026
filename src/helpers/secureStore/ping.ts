@@ -8,8 +8,11 @@ import {
 export async function secureStorePingAsync(ping: Ping): Promise<void> {
   await storeJournalPingAsync(ping);
 }
-export function secureGetPingAsync(pingId: PingId): Promise<Ping | null> {
-  return getJournalPingAsync(pingId);
+export function secureGetPingAsync(
+  pingId: PingId,
+  expectedOwnerId?: string,
+): Promise<Ping | null> {
+  return getJournalPingAsync(pingId, expectedOwnerId);
 }
 export function secureRemovePingAsync(pingId: PingId): Promise<void> {
   return removeJournalRecordsAsync({ pingId });

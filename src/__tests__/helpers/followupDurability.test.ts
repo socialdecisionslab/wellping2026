@@ -89,3 +89,64 @@ test("malformed schedule dates fail closed without changing saved bytes", async 
     ]),
   ).rejects.toThrow();
 });
+
+test("followup validation cannot move immutable inputs into a later session", async () => {
+  const studyHelpers = require("../../helpers/studyFile");
+  const originalGetStreams = studyHelpers.getStreamsAsync;
+  let entered!: () => void;
+  let release!: () => void;
+  const started = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  jest
+    .spyOn(studyHelpers, "getStreamsAsync")
+    .mockImplementationOnce(async () => {
+      entered();
+      await new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      return originalGetStreams();
+    });
+  const input = pair.map((ping) => ({
+    ...ping,
+    afterDate: new Date(ping.afterDate),
+  }));
+  const scheduling = enqueueFollowupPingsOnceAsync("from-a", input);
+  await started;
+  const switching = secureStoreUserAsync({
+    username: "other",
+    password: "test-only",
+    loginDate: 2,
+  });
+  input[0].afterDate.setFullYear(2099);
+  release();
+  await scheduling;
+  await switching;
+  expect(await getFuturePingsQueue()).toEqual([]);
+  await secureStoreUserAsync({
+    username: "synthetic",
+    password: "test-only",
+    loginDate: 1,
+  });
+  expect(await getFuturePingsQueue()).toEqual(pair);
+});
+
+test("stale Home reservation and acknowledgement cannot consume a later owner's queue", async () => {
+  const { captureCurrentDataOwnerAsync } = require("../../helpers/dataJournal");
+  const originalOwner = await captureCurrentDataOwnerAsync();
+  await enqueueFollowupPingsOnceAsync("first", pair);
+  const reserved = (await peekFuturePingIfAny(originalOwner.id))!;
+  await secureStoreUserAsync({
+    username: "other",
+    password: "test-only",
+    loginDate: 2,
+  });
+  await enqueueFollowupPingsOnceAsync("first", pair);
+  await expect(peekFuturePingIfAny(originalOwner.id)).rejects.toMatchObject({
+    code: "OWNER_CHANGED",
+  });
+  await expect(
+    acknowledgeFuturePingAsync(reserved.operationId, originalOwner.id),
+  ).rejects.toMatchObject({ code: "OWNER_CHANGED" });
+  expect(await getFuturePingsQueue()).toEqual(pair);
+});

@@ -41,12 +41,14 @@ export async function insertPingAsync({
   streamName,
   operationId,
   expiresAt,
+  expectedOwnerId,
 }: {
   notificationTime: Date;
   startTime: Date;
   streamName: StreamName;
   operationId?: string;
   expiresAt?: Date;
+  expectedOwnerId?: string;
 }): Promise<Ping> {
   return insertJournalPingAsync({
     notificationTime,
@@ -54,6 +56,7 @@ export async function insertPingAsync({
     streamName,
     operationId,
     expiresAt,
+    expectedOwnerId,
   });
 }
 

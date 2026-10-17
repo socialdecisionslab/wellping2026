@@ -1,6 +1,6 @@
 # Stage 2: data reliability reconstruction on PR6
 
-Status: implementation checkpoint, not production-ready. Final validation results are recorded when the review commit is published.
+Status: locally validated Stage 2 client implementation; backend and native-device release gates remain incomplete. Not production-ready.
 
 ## Baseline and scope
 
@@ -16,7 +16,7 @@ The unchanged baseline typechecked. Its first full Jest run passed 256 of 257 te
 - Study updates replace a single validated aggregate. Failed writes keep the previous valid configuration. A tombstone prevents interrupted legacy cleanup from resurrecting old configuration.
 - Firebase retries use stable logical identifiers and atomic multipath writes preserving remote-only records. Both backends bind dispatch to the captured account and destination. Every configured destination must succeed before local acknowledgement.
 - Follow-up pairs and their idempotency decisions are stored atomically. A queued follow-up is reserved until durable ping insertion succeeds, then acknowledged. Its insertion token survives retries.
-- Logout refuses pending/in-progress observations and retains encrypted owner-isolated records rather than partially deleting them. This is retention, not a claim that records have been erased. A later account does not inherit those observations.
+- Logout unmounts survey inputs, drains accepted writes, and refuses unsynchronized or still-active observations. Known expired incomplete observations retain their original incomplete status and can be synchronized before logout. A durable closed-session receipt recovers interrupted credential/configuration teardown; encrypted owner-isolated archives remain intact. Verified closed archives permit a later isolated enrollment, while unknown legacy or unresolved quarantine still blocks. This is retention, not erasure.
 - A versioned synthetic-tested JSON export preserves dates, timezone offsets, response order, PNA, and interrupted observations without credentials. This is a new explicit interchange format, not verified compatibility with historical parser tools.
 
 ## Remaining release gates
@@ -30,3 +30,13 @@ The unchanged baseline typechecked. Its first full Jest run passed 256 of 257 te
 7. Dependency ESLint configuration currently requires an absent eslint-plugin-import. Focused checks do not substitute for a working aggregate lint gate.
 
 No merge, deployment, production participant data access, credential rotation, or new persistent access is part of this stage.
+
+## Durable checkpoint evidence
+
+- Draft review: https://github.com/socialdecisionslab/wellping2026/pull/7, stacked on PR6; not a merge request for main.
+- Initial incomplete checkpoint: 83e875522a37f7ae574d93e48e7ae0e3d9e9b49c; tree 0994e08946bd780c134741f178942e4fbdb43c8e; remote tree and parent independently fetched and verified.
+- Working-tree aggregate on October 17: 26 Jest suites, 374 tests, 282 original snapshots passed. Further edits after this run require a new aggregate run.
+- Exact initial-checkpoint CI run [39051460162](https://github.com/socialdecisionslab/wellping2026/actions/runs/39051460162) passed installation and typecheck, then failed two new survey readiness assertions (379/381 tests and all 282 snapshots passed). Security and bundle steps did not execute. Tests now await durable readiness/terminal completion instead of incidental flush timing; the final tree still needs its own complete CI result. This checkpoint is not a green-release claim.
+- Final October 17 local validation after lifecycle and owner-fence fixes: `yarn test:ci` exited 0, TypeScript passed, 30 Jest suites / 427 tests / 282 unchanged snapshots passed, and all five security entry scripts passed. The journal script covers 430 before/after mutation restart cases plus silent-write, malformed-state, ownership and concurrency cases.
+- `yarn smoke:local` exited 0: isolated iOS and Android bundles compiled and both local development manifests/listeners passed. These are JavaScript bundle checks, not new native builds or physical-device evidence.
+- The follow-up commit and its exact remote CI result must be checked in PR7. Passing local checks does not close the backend/device gates above. Continue independent modernization work without claiming those gates complete.

@@ -6,8 +6,11 @@ import {
   assertDataOwnerAsync,
   captureCurrentDataOwnerAsync,
   DataOwner,
+  DataRecoveryError,
   getDataOwnerAsync,
   getResumeAnswersAsync,
+  getJournalPingIdsAsync,
+  withOpenDataSessionAsync,
 } from "../dataJournal";
 import {
   clearChunkedValue,
@@ -51,12 +54,15 @@ async function scopeFor(): Promise<ResumeScope> {
 }
 function serializedForOwner<T>(
   operation: (owner: DataOwner, scope: ResumeScope) => Promise<T>,
+  expectedOwnerId?: string,
 ): Promise<T> {
   // Capture the requesting session before waiting behind another resume operation.
   const captured = captureCurrentDataOwnerAsync();
   void captured.catch(() => undefined);
   return serialized(async () => {
     const owner = await captured;
+    if (expectedOwnerId !== undefined && owner.id !== expectedOwnerId)
+      throw new DataRecoveryError("OWNER_CHANGED");
     await assertDataOwnerAsync(owner);
     const scope = await scopeFor();
     await assertDataOwnerAsync(owner);
@@ -178,22 +184,31 @@ async function reconcileAnswers(
   }
   return { ...state, answers, isInTransition: false };
 }
-export function storePingStateAsync(pingId: string, state: SurveyScreenState) {
+export function storePingStateAsync(
+  pingId: string,
+  state: SurveyScreenState,
+  expectedOwnerId?: string,
+) {
   // Snapshot synchronously so subsequent UI state changes cannot affect this write.
   const value = JSON.stringify(state);
   return serializedForOwner(async (owner, scope) => {
     parseState(value);
     await quarantineLegacyResumeAsync(`${scope.legacyPrefix}${pingId}`);
     const key = await keyFor(pingId, owner);
-    await register(key, scope);
-    await writeChunkedValue(key, value);
-    if ((await readChunkedValue(key)) !== value)
-      throw new SecureStorageIntegrityError(
-        "Resume write verification failed.",
-      );
-  });
+    await withOpenDataSessionAsync(owner.id, async () => {
+      await register(key, scope);
+      await writeChunkedValue(key, value);
+      if ((await readChunkedValue(key)) !== value)
+        throw new SecureStorageIntegrityError(
+          "Resume write verification failed.",
+        );
+    });
+  }, expectedOwnerId);
 }
-export function getPingStateAsync(pingId: string): Promise<SurveyScreenState> {
+export function getPingStateAsync(
+  pingId: string,
+  expectedOwnerId?: string,
+): Promise<SurveyScreenState> {
   return serializedForOwner(async (owner, scope) => {
     const legacyKey = `${scope.legacyPrefix}${pingId}`;
     const quarantined = await quarantineLegacyResumeAsync(legacyKey);
@@ -208,33 +223,58 @@ export function getPingStateAsync(pingId: string): Promise<SurveyScreenState> {
         "Indexed resume data is unavailable; data preserved.",
       );
     throw new MissingResumeStateError();
-  });
+  }, expectedOwnerId);
 }
-export function clearPingStateAsync(pingId: string) {
+export function clearPingStateAsync(pingId: string, expectedOwnerId?: string) {
   return serializedForOwner(async (owner, scope) => {
     await quarantineLegacyResumeAsync(`${scope.legacyPrefix}${pingId}`);
     const key = await keyFor(pingId, owner);
-    await clearChunkedValue(key);
-    // Keep the index during deletion; remove its entry only after chunk cleanup succeeds.
-    const keys = await readIndex(scope);
-    if (keys.includes(key)) {
-      await AsyncStorage.setItem(
-        scope.indexKey,
-        JSON.stringify(keys.filter((entry) => entry !== key)),
-      );
-    }
-  });
+    await withOpenDataSessionAsync(owner.id, async () => {
+      await clearChunkedValue(key);
+      // Keep the index during deletion; remove its entry only after chunk cleanup succeeds.
+      const keys = await readIndex(scope);
+      if (keys.includes(key)) {
+        await AsyncStorage.setItem(
+          scope.indexKey,
+          JSON.stringify(keys.filter((entry) => entry !== key)),
+        );
+      }
+    });
+  }, expectedOwnerId);
 }
 /** Call before deleting study/session information. Recovery quarantine is intentionally
  * excluded: old study-scoped records have no verified participant owner. */
 export function clearAllPingStatesAsync() {
-  return serialized(async () => {
-    const scope = await scopeFor();
-    const keys = await readIndex(scope);
-    const prefix = scope.legacyPrefix;
+  return serializedForOwner(async (owner, scope) => {
+    // Legacy recovery stays encrypted and is never considered owned by this session.
     for (const key of await AsyncStorage.getAllKeys())
-      if (key.startsWith(prefix)) await quarantineLegacyResumeAsync(key);
-    for (const key of keys) await clearChunkedValue(key);
-    await AsyncStorage.removeItem(scope.indexKey);
+      if (key.startsWith(scope.legacyPrefix))
+        await quarantineLegacyResumeAsync(key);
+    const ownedKeys = new Set(
+      await Promise.all(
+        (await getJournalPingIdsAsync()).map((pingId) => keyFor(pingId, owner)),
+      ),
+    );
+    await withOpenDataSessionAsync(owner.id, async () => {
+      const keys = await readIndex(scope);
+      for (const key of keys)
+        if (ownedKeys.has(key)) await clearChunkedValue(key);
+      // Retain other sessions' archived snapshots rather than broad study deletion.
+      const retained = keys.filter((key) => !ownedKeys.has(key));
+      if (retained.length) {
+        const value = JSON.stringify(retained);
+        await AsyncStorage.setItem(scope.indexKey, value);
+        if ((await AsyncStorage.getItem(scope.indexKey)) !== value)
+          throw new SecureStorageIntegrityError(
+            "Resume index cleanup verification failed; data preserved.",
+          );
+      } else {
+        await AsyncStorage.removeItem(scope.indexKey);
+        if ((await AsyncStorage.getItem(scope.indexKey)) !== null)
+          throw new SecureStorageIntegrityError(
+            "Resume index cleanup verification failed; data preserved.",
+          );
+      }
+    });
   });
 }

@@ -30,6 +30,8 @@ function fixture(seed) {
     if (mutation === failAt && failAfter)
       throw Error("synthetic process interruption");
   };
+  let dropSet = null,
+    dropDelete = null;
   const ss = {
     WHEN_UNLOCKED_THIS_DEVICE_ONLY: 1,
     async getItemAsync(k) {
@@ -37,6 +39,7 @@ function fixture(seed) {
       return secure.get(k) ?? null;
     },
     async setItemAsync(k, v) {
+      if (dropSet?.(k, v)) return;
       assert.match(k, /^[A-Za-z0-9_.-]+$/);
       assert(
         Buffer.byteLength(v) <= 2048,
@@ -45,6 +48,7 @@ function fixture(seed) {
       return mutates(() => secure.set(k, v));
     },
     async deleteItemAsync(k) {
+      if (dropDelete?.(k)) return;
       return mutates(() => secure.delete(k));
     },
   };
@@ -63,6 +67,15 @@ function fixture(seed) {
     },
   };
   const mocks = {
+    "../../config/local": { IS_LOCAL_DEVELOPMENT: false },
+    "./asyncStorage/studyFile": {
+      async getCurrentStudyInfoAsync() {
+        return studyId === "unavailable-config" ? null : { id: studyId };
+      },
+    },
+    "./asyncStorage/asyncStorageConfig": {
+      ASYNC_STORAGE_WELLPING_PREFIX: "@WELLPING:",
+    },
     "expo-secure-store": ss,
     "@react-native-async-storage/async-storage": { default: as },
     "expo-crypto": {
@@ -74,7 +87,7 @@ function fixture(seed) {
     "react-native-uuid": { default: { v4: crypto.randomUUID } },
     "./asyncStorage/asyncStorage": {
       async getASKeyAsync(k = "") {
-        return `study-${studyId}/` + k;
+        return `@WELLPING:Study_${studyId}/` + k;
       },
     },
     "./debug": {
@@ -140,6 +153,12 @@ function fixture(seed) {
   const api = {
     secure,
     plain,
+    dropSet(fn) {
+      dropSet = fn;
+    },
+    dropDelete(fn) {
+      dropDelete = fn;
+    },
     restart() {
       cache = new Map();
       return load("src/helpers/dataJournal.ts");
@@ -441,7 +460,7 @@ async function mutationMatrix(name, seed, operation, verify) {
     "PASS: participant/session/study/installation isolation and archived-owner preservation",
   );
   const legacy = fixture();
-  legacy.plain.set("study-study-1/pingsList", '["mood1"]');
+  legacy.plain.set("@WELLPING:Study_study-1/pingsList", '["mood1"]');
   const legacyBefore = legacy.seed();
   await expectRecovery(() => snapshot(legacy), "LEGACY_OWNERSHIP_UNVERIFIED");
   assert.deepEqual(legacy.seed(), legacyBefore);
@@ -605,6 +624,53 @@ async function mutationMatrix(name, seed, operation, verify) {
     !Object.keys((await snapshot(expiry)).pings[0]).includes("expiresAt"),
     "protocol expiry is private journal metadata, not an upload schema change",
   );
+  const atBoundary = {
+    ...answer(expiring.id, "accepted at boundary", "boundary"),
+    date: new Date(now.getTime() + 1000),
+  };
+  await expiry.journal.storeJournalAnswerAsync(atBoundary);
+  await expectRecovery(
+    () =>
+      expiry.journal.storeJournalAnswerAsync({
+        ...atBoundary,
+        data: { value: ["too late"] },
+        date: new Date(now.getTime() + 1001),
+      }),
+    "PING_EXPIRED",
+  );
+  await expectRecovery(
+    () =>
+      expiry.journal.completeJournalPingAsync(
+        expiring.id,
+        new Date(now.getTime() + 1001),
+      ),
+    "PING_EXPIRED",
+  );
+  await expiry.journal.completeJournalPingAsync(
+    expiring.id,
+    new Date(now.getTime() + 1000),
+  );
+  assert.equal(
+    (
+      await expiry.journal.completeJournalPingAsync(
+        expiring.id,
+        new Date(now.getTime() + 2000),
+      )
+    ).endTime.getTime(),
+    now.getTime() + 1000,
+    "idempotent completion preserves original protocol time",
+  );
+  await expectRecovery(
+    () =>
+      expiry.journal.insertJournalPingAsync(
+        insertion({
+          streamName: "late",
+          startTime: new Date(now.getTime() + 1001),
+          expiresAt: new Date(now.getTime() + 1000),
+        }),
+      ),
+    "PING_EXPIRED",
+  );
   const unknown = await expiry.journal.insertJournalPingAsync(
     insertion({ streamName: "unknown" }),
   );
@@ -623,6 +689,25 @@ async function mutationMatrix(name, seed, operation, verify) {
     password: "synthetic",
     loginDate: 200,
   });
+  const beforeOldInsertion = stale.seed();
+  const beforeOldInsertionMutations = stale.mutationCount();
+  await expectRecovery(
+    () =>
+      stale.journal.insertJournalPingAsync(
+        insertion({ expectedOwnerId: oldOwner }),
+      ),
+    "OWNER_CHANGED",
+  );
+  assert.deepEqual(
+    stale.seed(),
+    beforeOldInsertion,
+    "stale insertion preserves all previous records and creates no new owner archive",
+  );
+  assert.equal(
+    stale.mutationCount(),
+    beforeOldInsertionMutations,
+    "expected owner is checked before any journal write",
+  );
   await stale.journal.insertJournalPingAsync(insertion());
   const beforeStale = stale.seed();
   await expectRecovery(
@@ -665,7 +750,136 @@ async function mutationMatrix(name, seed, operation, verify) {
     "PASS: malformed preparing/ready/applied payloads, repeated recovery crashes, bracket IDs and owner-fenced resume reads",
   );
   console.log(
-    "PASS: durable protocol expiry, conservative unknown expiry and stale-owner answer/completion fences",
+    "PASS: durable protocol expiry, conservative unknown expiry and stale-owner insertion/answer/completion fences",
+  );
+  const closable = fixture(seed);
+  await closable.journal.completeJournalPingAsync("mood1", now);
+  await closable.journal.acknowledgeDataSnapshotAsync(await snapshot(closable));
+  const closingSeed = closable.seed();
+  await mutationMatrix(
+    "durable session close and logout receipt",
+    closingSeed,
+    (j) => j.closeDataSessionAsync(),
+    async (f) => {
+      const handle = await f.journal.closeDataSessionAsync();
+      assert.equal(await f.journal.isDataSessionClosedAsync(), true);
+      await expectRecovery(
+        () => f.journal.storeJournalAnswerAsync(answer("mood1", "too late")),
+        "SESSION_CLOSED",
+      );
+      await expectRecovery(
+        () => f.journal.completeJournalPingAsync("mood1", now),
+        "SESSION_CLOSED",
+      );
+      assert.equal(
+        (await f.journal.getVerifiedPendingLogoutAsync()).id,
+        handle.id,
+      );
+      f.setUser(null);
+      assert.equal(
+        (await f.journal.getVerifiedPendingLogoutAsync()).id,
+        handle.id,
+        "receipt verifies without active user",
+      );
+      f.setStudy("unavailable-config");
+      assert.equal(
+        (await f.journal.getVerifiedPendingLogoutAsync()).id,
+        handle.id,
+        "receipt verifies without current study configuration",
+      );
+      await f.journal.completeDataLogoutAsync(handle);
+      assert.equal(await f.journal.getVerifiedPendingLogoutAsync(), null);
+    },
+  );
+  const pendingData = fixture(seed);
+  await expectRecovery(
+    () => pendingData.journal.closeDataSessionAsync(),
+    "PENDING_RESEARCH_DATA",
+  );
+  await pendingData.journal.acknowledgeDataSnapshotAsync(
+    await snapshot(pendingData),
+  );
+  await expectRecovery(
+    () => pendingData.journal.closeDataSessionAsync(),
+    "ACTIVE_RESEARCH_DATA",
+  );
+  const newLogin = fixture(closingSeed);
+  await newLogin.journal.closeDataSessionAsync();
+  await newLogin.journal.withDataJournalLockAsync(() =>
+    newLogin.journal.clearPendingDataLogoutBeforeLoginInsideLockAsync(),
+  );
+  newLogin.setUser({ username: "new", password: "synthetic", loginDate: 500 });
+  newLogin.setUser(null);
+  assert.equal(
+    await newLogin.journal.getVerifiedPendingLogoutAsync(),
+    null,
+    "lost new-user data cannot be classified as an old logout",
+  );
+  console.log(
+    "PASS: close gate, no-user/no-config teardown receipt and new-login pointer clearing",
+  );
+  const noReady = fixture(seed);
+  noReady.dropSet(
+    (key, value) =>
+      key.endsWith(".head") && JSON.parse(value).state === "ready",
+  );
+  await expectRecovery(
+    () =>
+      noReady.journal.storeJournalAnswerAsync(
+        answer("mood1", "not yet durable", "no_ready"),
+      ),
+    "SECURE_WRITE_NOT_DURABLE",
+  );
+  noReady.dropSet(null);
+  assert.equal(
+    (await snapshot(noReady)).answers.length,
+    1,
+    "silent ready no-op never reports a saved answer",
+  );
+  const noPointer = fixture(closingSeed);
+  noPointer.secure.set(
+    "WELLPING-installation-1-Study_study-1.user",
+    JSON.stringify({
+      username: "participant-a",
+      password: "synthetic",
+      loginDate: 100,
+    }),
+  );
+  noPointer.dropSet((key) => key.endsWith("dataJournal.v1.logout"));
+  await expectRecovery(
+    () => noPointer.journal.closeDataSessionAsync(),
+    "SECURE_WRITE_NOT_DURABLE",
+  );
+  noPointer.dropSet(null);
+  noPointer.journal = noPointer.restart();
+  const recoveredClose =
+    await noPointer.journal.getVerifiedPendingLogoutAsync();
+  assert(
+    recoveredClose,
+    "startup replays closed-index-before-pointer WAL without bootstrapping",
+  );
+  noPointer.secure.delete("WELLPING-installation-1-Study_study-1.user");
+  noPointer.setUser(null);
+  noPointer.setStudy("unavailable-config");
+  noPointer.dropDelete((key) => key.endsWith("dataJournal.v1.logout"));
+  await expectRecovery(
+    () => noPointer.journal.completeDataLogoutAsync(recoveredClose),
+    "LOGOUT_POINTER_NOT_CLEARED",
+  );
+  noPointer.dropDelete(null);
+  await noPointer.journal.completeDataLogoutAsync(recoveredClose);
+  const malformedUser = fixture(closingSeed);
+  await malformedUser.journal.closeDataSessionAsync();
+  malformedUser.secure.set(
+    "WELLPING-installation-1-Study_study-1.user",
+    "null",
+  );
+  await expectRecovery(
+    () => malformedUser.journal.getVerifiedPendingLogoutAsync(),
+    "LOGOUT_OWNER_MISMATCH",
+  );
+  console.log(
+    "PASS: silent ready/pointer no-ops detected, startup close-WAL replay, malformed user never treated as absent",
   );
   console.log("All data journal synthetic reliability checks passed.");
 })().catch((error) => {

@@ -2,6 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as SecureStore from "expo-secure-store";
 
 import {
+  clearCurrentStudyFileAsync,
   getCurrentStudyFileAsync,
   storeCurrentStudyFileAsync,
 } from "../../helpers/asyncStorage/studyFile";
@@ -11,7 +12,20 @@ import {
   isVerifiedPendingEnrollmentAsync,
   preparePendingEnrollmentAsync,
 } from "../../helpers/failedEnrollment";
-import { secureStoreUserAsync } from "../../helpers/secureStore/user";
+import {
+  secureClearUserAsync,
+  secureStoreUserAsync,
+} from "../../helpers/secureStore/user";
+import {
+  acknowledgeDataSnapshotAsync,
+  captureDataSnapshotAsync,
+  closeDataSessionAsync,
+  completeDataLogoutAsync,
+  completeJournalPingAsync,
+  getDataOwnerAsync,
+  insertJournalPingAsync,
+} from "../../helpers/dataJournal";
+import { quarantineLegacyResumeAsync } from "../../helpers/secureStore/legacyResumeQuarantine";
 import { parseAndStoreStudyFileAsync } from "../../helpers/studyFile";
 
 jest.mock("../../helpers/firebase", () => ({
@@ -157,7 +171,13 @@ test.each([
     await prepareAndStore();
     const historical = `${studyPrefix}${suffix}`;
     await AsyncStorage.setItem(historical, "synthetic historical bytes");
-    expect(await isVerifiedPendingEnrollmentAsync(study)).toBe(false);
+    if (suffix === "dataJournal.v1.owners") {
+      await expect(isVerifiedPendingEnrollmentAsync(study)).rejects.toThrow(
+        /recovery/,
+      );
+    } else {
+      expect(await isVerifiedPendingEnrollmentAsync(study)).toBe(false);
+    }
     await expect(preparePendingEnrollmentAsync(study)).rejects.toThrow(
       /recovery/,
     );
@@ -252,4 +272,98 @@ test("an interrupted completion retains the receipt for restart cleanup", async 
   expect(await AsyncStorage.getItem(markerKey)).not.toBeNull();
   await completePendingEnrollmentAsync();
   expect(await AsyncStorage.getItem(markerKey)).toBeNull();
+});
+
+async function createClosedArchive() {
+  await storeCurrentStudyFileAsync(study);
+  await secureStoreUserAsync(user);
+  const ping = await insertJournalPingAsync({
+    notificationTime: new Date("2026-01-01T09:00:00Z"),
+    startTime: new Date("2026-01-01T09:01:00Z"),
+    streamName: "welcomeStream",
+  });
+  await completeJournalPingAsync(ping.id, new Date("2026-01-01T09:02:00Z"));
+  await acknowledgeDataSnapshotAsync(await captureDataSnapshotAsync());
+  const owner = await closeDataSessionAsync();
+  await secureClearUserAsync();
+  await clearCurrentStudyFileAsync();
+  await completeDataLogoutAsync(owner);
+  return owner;
+}
+
+test("verified closed archives permit a fresh same-study enrollment without adopting or changing old records", async () => {
+  const oldOwner = await createClosedArchive();
+  const archivedBytes = { ...(SecureStore as any).__INTERNAL_MOCK_STORAGE__ };
+  await prepareAndStore();
+  expect(
+    await isVerifiedPendingEnrollmentAsync((await getCurrentStudyFileAsync())!),
+  ).toBe(true);
+  await preparePendingEnrollmentAsync(study);
+  await secureStoreUserAsync({
+    ...user,
+    username: "synthetic-new-user",
+    loginDate: 20,
+  });
+  await completePendingEnrollmentAsync();
+  const newOwner = await getDataOwnerAsync();
+  expect(newOwner.id).not.toBe(oldOwner.id);
+  expect((await captureDataSnapshotAsync()).pings).toEqual([]);
+  for (const [key, bytes] of Object.entries(archivedBytes))
+    expect(await SecureStore.getItemAsync(key)).toBe(bytes);
+  expect(await AsyncStorage.getItem(markerKey)).toBeNull();
+});
+
+test("an open owner archive never qualifies for fresh enrollment after credentials disappear", async () => {
+  await storeCurrentStudyFileAsync(study);
+  await secureStoreUserAsync(user);
+  const owner = await getDataOwnerAsync();
+  await secureClearUserAsync();
+  await clearCurrentStudyFileAsync();
+  await expect(preparePendingEnrollmentAsync(study)).rejects.toThrow();
+  expect(await AsyncStorage.getItem(markerKey)).toBeNull();
+  expect(
+    await AsyncStorage.getItem(`${studyPrefix}dataJournal.v1.owners`),
+  ).toContain(owner.id);
+});
+
+test("a closed archive does not excuse unknown legacy records", async () => {
+  await createClosedArchive();
+  const unknown = `${studyPrefix}pingsList`;
+  await AsyncStorage.setItem(unknown, "synthetic unknown history");
+  await expect(preparePendingEnrollmentAsync(study)).rejects.toThrow();
+  expect(await AsyncStorage.getItem(markerKey)).toBeNull();
+  expect(await AsyncStorage.getItem(unknown)).toBe("synthetic unknown history");
+});
+
+test("owner-linked archived follow-up metadata does not prevent fresh enrollment", async () => {
+  const oldOwner = await createClosedArchive();
+  const key = `${studyPrefix}FuturePingQueue.v2.${oldOwner.id}`;
+  const queue = JSON.stringify({
+    version: 2,
+    queue: [
+      { streamName: "welcomeStream", afterDate: "2026-01-02T09:00:00.000Z" },
+    ],
+    completed: ["synthetic-operation"],
+  });
+  await AsyncStorage.setItem(key, queue);
+  await prepareAndStore();
+  expect(await isVerifiedPendingEnrollmentAsync(study)).toBe(true);
+  expect(await AsyncStorage.getItem(key)).toBe(queue);
+});
+
+test("quarantined unknown legacy responses remain recovery-only even beside closed archives", async () => {
+  await createClosedArchive();
+  await prepareAndStore();
+  const source = `${studyPrefix}PingsState:unknown-legacy-ping`;
+  await AsyncStorage.setItem(source, "synthetic unknown response bytes");
+  await quarantineLegacyResumeAsync(source);
+  expect(await AsyncStorage.getItem(source)).toBeNull();
+  const indexKey = "@WELLPING:legacyResumeQuarantineIndex.v1";
+  const preservedIndex = await AsyncStorage.getItem(indexKey);
+  expect(preservedIndex).not.toBeNull();
+  expect(await isVerifiedPendingEnrollmentAsync(study)).toBe(false);
+  await expect(preparePendingEnrollmentAsync(study)).rejects.toThrow(
+    /recovery/,
+  );
+  expect(await AsyncStorage.getItem(indexKey)).toBe(preservedIndex);
 });

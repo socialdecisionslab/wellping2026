@@ -4,14 +4,17 @@ import { getStreamsAsync } from "../studyFile";
 import { getASKeyAsync } from "./asyncStorage";
 import {
   captureCurrentDataOwnerAsync,
+  DataRecoveryError,
   assertDataOwnerInsideLockAsync,
   withDataJournalLockAsync,
 } from "../dataJournal";
 
 export type FuturePing = { afterDate: Date; streamName: StreamName };
 type State = { version: 2; queue: FuturePing[]; completed: string[] };
-async function context() {
+async function context(expectedOwnerId?: string) {
   const owner = await captureCurrentDataOwnerAsync();
+  if (expectedOwnerId !== undefined && owner.id !== expectedOwnerId)
+    throw new DataRecoveryError("OWNER_CHANGED");
   const legacy = await AsyncStorage.getItem(
     await getASKeyAsync("FuturePingQueue:"),
   );
@@ -71,6 +74,7 @@ export async function initFuturePingQueueAsync() {
 export async function enqueueFollowupPingsOnceAsync(
   operationId: string,
   followups: FuturePing[],
+  expectedOwnerId?: string,
 ) {
   if (
     followups.some(
@@ -79,13 +83,6 @@ export async function enqueueFollowupPingsOnceAsync(
     )
   )
     throw new Error("Invalid follow-up date.");
-  const streams = await getStreamsAsync();
-  if (
-    followups.some(
-      (ping) => !Object.prototype.hasOwnProperty.call(streams, ping.streamName),
-    )
-  )
-    throw new Error("Unknown follow-up stream.");
   const frozen = followups.map((ping) => ({
     streamName: ping.streamName,
     afterDate: new Date(ping.afterDate),
@@ -93,6 +90,16 @@ export async function enqueueFollowupPingsOnceAsync(
   const { owner, key } = await context();
   await withDataJournalLockAsync(async () => {
     await assertDataOwnerInsideLockAsync(owner);
+    if (expectedOwnerId !== undefined && owner.id !== expectedOwnerId)
+      throw new Error("Follow-up session changed; data preserved.");
+    const streams = await getStreamsAsync();
+    if (
+      frozen.some(
+        (ping) =>
+          !Object.prototype.hasOwnProperty.call(streams, ping.streamName),
+      )
+    )
+      throw new Error("Unknown follow-up stream.");
     const state = await read(key);
     if (state.completed.includes(operationId)) return;
     if (state.queue.length === 0) state.queue.push(...frozen);
@@ -106,13 +113,13 @@ export async function enqueueToFuturePingQueue(futurePing: FuturePing) {
     !Number.isFinite(+futurePing.afterDate)
   )
     throw new Error("Invalid follow-up date.");
-  const streams = await getStreamsAsync();
-  if (!Object.prototype.hasOwnProperty.call(streams, futurePing.streamName))
-    throw new Error("Unknown follow-up stream.");
   const frozen = { ...futurePing, afterDate: new Date(futurePing.afterDate) };
   const { owner, key } = await context();
   await withDataJournalLockAsync(async () => {
     await assertDataOwnerInsideLockAsync(owner);
+    const streams = await getStreamsAsync();
+    if (!Object.prototype.hasOwnProperty.call(streams, frozen.streamName))
+      throw new Error("Unknown follow-up stream.");
     const state = await read(key);
     if (
       !state.queue.some(
@@ -139,10 +146,10 @@ export async function dequeueFuturePingIfAny(): Promise<FuturePing | null> {
 }
 
 /** Non-destructive reservation: acknowledgement follows durable ping creation. */
-export async function peekFuturePingIfAny(): Promise<
-  (FuturePing & { operationId: string }) | null
-> {
-  const { owner, key } = await context();
+export async function peekFuturePingIfAny(
+  expectedOwnerId?: string,
+): Promise<(FuturePing & { operationId: string }) | null> {
+  const { owner, key } = await context(expectedOwnerId);
   return withDataJournalLockAsync(async () => {
     await assertDataOwnerInsideLockAsync(owner);
     const ping = (await read(key)).queue.find(
@@ -160,8 +167,11 @@ export async function peekFuturePingIfAny(): Promise<
       : null;
   });
 }
-export async function acknowledgeFuturePingAsync(operationId: string) {
-  const { owner, key } = await context();
+export async function acknowledgeFuturePingAsync(
+  operationId: string,
+  expectedOwnerId?: string,
+) {
+  const { owner, key } = await context(expectedOwnerId);
   await withDataJournalLockAsync(async () => {
     await assertDataOwnerInsideLockAsync(owner);
     const state = await read(key);

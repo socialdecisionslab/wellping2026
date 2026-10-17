@@ -32,11 +32,13 @@ import {
   getPingStateAsync,
   MissingResumeStateError,
 } from "./helpers/asyncStorage/pingState";
+import { getUnuploadedPingsListAsync } from "./helpers/asyncStorage/unuploadedPingsList";
+import { waitForPendingSurveySavesAsync } from "./helpers/surveyAnswerWrites";
 import {
-  addToUnuploadedPingsListIfNeededAsync,
-  getUnuploadedPingsListAsync,
-} from "./helpers/asyncStorage/unuploadedPingsList";
-import { isJournalPingActiveAsync } from "./helpers/dataJournal";
+  isJournalPingActiveAsync,
+  captureCurrentDataOwnerAsync,
+  assertDataOwnerAsync,
+} from "./helpers/dataJournal";
 import { getNotificationTimesAsync } from "./helpers/asyncStorage/notificationTimes";
 import { uploadDataAsync } from "./helpers/dataUpload";
 import {
@@ -98,6 +100,8 @@ interface HomeScreenState {
   resumeError: boolean;
   startupError?: boolean;
   expiredIncomplete?: boolean;
+  expirySavePending?: boolean;
+  expirySaveError?: boolean;
 }
 
 export default class HomeScreen extends React.Component<
@@ -137,18 +141,60 @@ export default class HomeScreen extends React.Component<
       previousNotificationTime && previousNotificationTime.getTime();
     const currentNotificationTimeNumber =
       currentNotificationTime && currentNotificationTime.getTime();
-    if (currentNotificationTimeNumber !== previousNotificationTimeNumber) {
-      // It means that the previous ping has ended. We are either in between
-      // two pings or in a new ping. So we can reset `currentPing` state.
-      this.setState({
-        currentPing: null,
-        expiredIncomplete:
-          this.state.expiredIncomplete ||
-          !!(this.state.currentPing && !this.state.currentPing.endTime),
-      });
+    const privateWindowExpired =
+      this.state.currentPing &&
+      !this.state.currentPing.endTime &&
+      !(await isJournalPingActiveAsync(this.state.currentPing.id));
+    if (
+      privateWindowExpired ||
+      currentNotificationTimeNumber !== previousNotificationTimeNumber
+    ) {
+      if (this.state.currentPing && !this.state.currentPing.endTime) {
+        await this.preserveExpiredSurveyAsync();
+      } else {
+        this.setState({ currentPing: null });
+      }
     }
 
     await clearSentNotificationsAsync();
+  }
+
+  preservingExpired: Promise<void> | null = null;
+  expiryTransitionRequested = false;
+  preserveExpiredSurveyAsync() {
+    this.expiryTransitionRequested = true;
+    return this.retryPendingSurveySavesAsync();
+  }
+
+  retryPendingSurveySavesAsync() {
+    if (this.preservingExpired) return this.preservingExpired;
+    this.preservingExpired = new Promise<void>((resolve) => {
+      this.setState(
+        { expirySavePending: true, expirySaveError: false },
+        resolve,
+      );
+    })
+      .then(() => waitForPendingSurveySavesAsync())
+      .then(() => {
+        if (this.expiryTransitionRequested) {
+          this.setState({
+            currentPing: null,
+            expiredIncomplete: true,
+            expirySavePending: false,
+            expirySaveError: false,
+          });
+        } else {
+          this.setState({ expirySavePending: false, expirySaveError: false });
+        }
+        this.expiryTransitionRequested = false;
+      })
+      .catch(() => {
+        this.setState({ expirySavePending: false, expirySaveError: true });
+      })
+      .finally(() => {
+        this.preservingExpired = null;
+      });
+    return this.preservingExpired;
   }
 
   _handleAppStateChange = (nextAppState: AppStateStatus) => {
@@ -244,7 +290,8 @@ export default class HomeScreen extends React.Component<
       latestPing &&
       currentNotificationTime &&
       latestPing.notificationTime.getTime() ===
-        currentNotificationTime.getTime()
+        currentNotificationTime.getTime() &&
+      (latestPing.endTime || (await isJournalPingActiveAsync(latestPing.id)))
     ) {
       await this.restorePingAsync(latestPing);
     } else if (latestPing && !latestPing.endTime) {
@@ -352,6 +399,7 @@ export default class HomeScreen extends React.Component<
   }
 
   async beginSurveyAsync() {
+    const owner = await captureCurrentDataOwnerAsync();
     let followupOperationId: string | undefined;
     await new Promise<void>((resolve) =>
       this.setState({ isLoading: true }, resolve),
@@ -387,7 +435,7 @@ export default class HomeScreen extends React.Component<
           newStreamName,
         )
       ) {
-        const futurePingIfAny = await peekFuturePingIfAny();
+        const futurePingIfAny = await peekFuturePingIfAny(owner.id);
         if (futurePingIfAny) {
           newStreamName = futurePingIfAny.streamName;
           followupOperationId = futurePingIfAny.operationId;
@@ -395,9 +443,14 @@ export default class HomeScreen extends React.Component<
       }
     }
 
-    await this._startSurveyTypeAsync(newStreamName, followupOperationId);
+    await this._startSurveyTypeAsync(
+      newStreamName,
+      followupOperationId,
+      owner.id,
+    );
     if (followupOperationId)
-      await acknowledgeFuturePingAsync(followupOperationId);
+      await acknowledgeFuturePingAsync(followupOperationId, owner.id);
+    await assertDataOwnerAsync(owner);
 
     // TODO: should this be after setNotificationsAsync?
     await new Promise<void>((resolve) =>
@@ -420,6 +473,14 @@ export default class HomeScreen extends React.Component<
     doFinally?: () => void;
   } = {}) {
     const { studyInfo } = this.props;
+    try {
+      await waitForPendingSurveySavesAsync();
+    } catch (error) {
+      this.setState({ expirySaveError: true });
+      await doAfterErrorAsync(error);
+      doFinally();
+      return;
+    }
     return uploadDataAsync(studyInfo, this.setUploadStatusSymbol, {
       unuploadedOnly: true,
     })
@@ -437,7 +498,11 @@ export default class HomeScreen extends React.Component<
       });
   }
 
-  async _startSurveyTypeAsync(streamName: StreamName, operationId?: string) {
+  async _startSurveyTypeAsync(
+    streamName: StreamName,
+    operationId: string | undefined,
+    expectedOwnerId: string,
+  ) {
     // Starting an offline survey must not wait for an unrelated network request.
     void this._uploadUnuploadedDataAndRemoveFromThemIfSuccessfulAsync().catch(
       () => undefined,
@@ -449,16 +514,18 @@ export default class HomeScreen extends React.Component<
     const expiresAt = schedule?.find(
       (item) => +item.notificationDate === +currentNotificationTime!,
     )?.expirationDate;
+    if (!expiresAt || !Number.isFinite(+expiresAt))
+      throw new Error("Current survey window needs recovery.");
     const newPing = await insertPingAsync({
       notificationTime: currentNotificationTime!,
       startTime: new Date(),
       streamName,
       operationId,
       expiresAt,
+      expectedOwnerId,
     });
 
-    // Add this ping to unuploaded pings list.
-    await addToUnuploadedPingsListIfNeededAsync(newPing);
+    // Insertion atomically marks this owner-bound ping dirty.
 
     this.setState({
       currentPing: newPing,
@@ -502,6 +569,25 @@ export default class HomeScreen extends React.Component<
       isLoading,
     } = this.state;
 
+    if (this.state.expirySavePending || this.state.expirySaveError) {
+      return (
+        <View style={{ padding: 24 }}>
+          <Text accessibilityRole="alert">
+            {this.state.expirySaveError
+              ? "The last accepted answers could not be saved yet. Keep the app open and retry saving or contact study staff."
+              : "Saving your last accepted answers; please keep the app open."}
+          </Text>
+          {this.state.expirySaveError && (
+            <Button
+              title="Retry saving"
+              onPress={() => {
+                void this.retryPendingSurveySavesAsync();
+              }}
+            />
+          )}
+        </View>
+      );
+    }
     if (this.state.startupError) {
       return (
         <View style={{ padding: 24 }}>

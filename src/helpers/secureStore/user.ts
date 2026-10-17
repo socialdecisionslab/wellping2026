@@ -1,5 +1,10 @@
 import * as SecureStore from "expo-secure-store";
-import { withDataJournalLockAsync } from "../dataJournal";
+import {
+  clearPendingDataLogoutBeforeLoginInsideLockAsync,
+  DataOwner,
+  DataRecoveryError,
+  withDataJournalLockAsync,
+} from "../dataJournal";
 import { logAndThrowError } from "../debug";
 import { getSSKeyAsync } from "./secureStore";
 
@@ -22,6 +27,7 @@ export async function secureStoreUserAsync(user: User) {
   try {
     const value = JSON.stringify(user);
     await withDataJournalLockAsync(async () => {
+      await clearPendingDataLogoutBeforeLoginInsideLockAsync();
       await SecureStore.setItemAsync(await getSSKeyAsync(USER_KEY), value);
     });
   } catch (error) {
@@ -29,10 +35,25 @@ export async function secureStoreUserAsync(user: User) {
   }
 }
 
-export async function secureClearUserAsync() {
+export async function secureClearUserAsync(owner?: DataOwner) {
   try {
     await withDataJournalLockAsync(async () => {
-      await SecureStore.deleteItemAsync(await getSSKeyAsync(USER_KEY));
+      const key = owner
+        ? `${owner.secureNamespace}${USER_KEY}`
+        : await getSSKeyAsync(USER_KEY);
+      const value = await SecureStore.getItemAsync(key);
+      if (value === null) return;
+      if (owner) {
+        const current = JSON.parse(value) as User;
+        if (
+          current.username !== owner.username ||
+          current.loginDate !== owner.loginDate
+        )
+          throw new DataRecoveryError("LOGOUT_OWNER_MISMATCH");
+      }
+      await SecureStore.deleteItemAsync(key);
+      if ((await SecureStore.getItemAsync(key)) !== null)
+        throw new DataRecoveryError("LOGOUT_USER_STILL_PRESENT");
     });
   } catch (error) {
     logAndThrowError(error);

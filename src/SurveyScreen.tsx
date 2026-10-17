@@ -47,7 +47,10 @@ import {
   getPingStateAsync,
   storePingStateAsync,
 } from "./helpers/asyncStorage/pingState";
-import { getDataOwnerAsync } from "./helpers/dataJournal";
+import {
+  getDataOwnerAsync,
+  getJournalPingExpiryAsync,
+} from "./helpers/dataJournal";
 import {
   getCriticalProblemTextForUser,
   getNonCriticalProblemTextForUser,
@@ -61,6 +64,10 @@ import {
 } from "./helpers/helpers";
 import { addEndTimeToPingAsync } from "./helpers/pings";
 import { secureGetPingAsync } from "./helpers/secureStore/ping";
+import {
+  enqueueSurveyAnswerSaveAsync,
+  waitForSurveyAnswerSavesAsync,
+} from "./helpers/surveyAnswerWrites";
 import { DataValidationFunction, QuestionScreenProps } from "./helpers/types";
 import ChoicesQuestionScreen from "./questionScreens/ChoicesQuestionScreen";
 import HowLongAgoQuestionScreen from "./questionScreens/HowLongAgoQuestion";
@@ -72,6 +79,13 @@ import SliderQuestionScreen from "./questionScreens/SliderQuestionScreen";
  * It is used by `pipeInExtraMetaData`.
  */
 type ExtraData = { [key: string]: any };
+
+const COMPLETION_EVENT_KEY = "__wellpingCompletionEvent";
+function recoveryCode(error: unknown): string | undefined {
+  return error !== null && typeof error === "object" && "code" in error
+    ? String(error.code)
+    : undefined;
+}
 
 type CurrentQuestionData = {
   /**
@@ -159,10 +173,6 @@ export interface SurveyScreenState {
   isInTransition: boolean;
 }
 
-// Accepted events share a lane across screen instances. A replacement screen
-// waits for this lane before re-reading its owner-verified resume state.
-const acceptedAnswerDrains = new Map<string, Promise<void>>();
-
 export default class SurveyScreen extends React.Component<
   SurveyScreenProps,
   SurveyScreenState
@@ -195,12 +205,42 @@ export default class SurveyScreen extends React.Component<
   private operations: Promise<void> = Promise.resolve();
   private navigationPending = false;
   private initialResumeReady = false;
+  private stoppedError: unknown = null;
   private expectedOwnerId: string | undefined;
+  private pingExpiresAt: Date | null = null;
   private acceptedAnswerIds = new Set<string>();
   private unmounted = false;
   private questionGeneration = 0;
   private releaseRetry: (() => void) | null = null;
   private readonly cancelled = new Error("Survey screen was closed.");
+
+  private stopForTerminalError(error: unknown) {
+    const firstNotice = this.stoppedError === null;
+    this.stoppedError = error;
+    if (this.unmounted || !firstNotice) return;
+    this.setState({ isInTransition: false });
+    const expired = recoveryCode(error) === "PING_EXPIRED";
+    Alert.alert(
+      expired ? "Survey window ended" : "Survey needs recovery",
+      expired
+        ? "The survey window has ended. Your earlier saved responses have been preserved."
+        : "This survey cannot continue in the current session. Existing saved responses have been preserved. Please keep the app open and recover the original session before continuing.",
+      [{ text: "OK" }],
+      { cancelable: false },
+    );
+  }
+
+  private acceptsEventAt(date: Date): boolean {
+    if (this.pingExpiresAt && date.getTime() > this.pingExpiresAt.getTime()) {
+      this.stopForTerminalError(
+        Object.assign(new Error("Survey window ended."), {
+          code: "PING_EXPIRED",
+        }),
+      );
+      return false;
+    }
+    return true;
+  }
 
   /** Keep failures at the head of the queue until the participant retries. */
   private async retrySave<T>(
@@ -210,8 +250,22 @@ export default class SurveyScreen extends React.Component<
     while (!this.unmounted || drainAcceptedAnswer) {
       try {
         return await operation();
-      } catch (_) {
-        if (this.unmounted) break;
+      } catch (error) {
+        const code = recoveryCode(error);
+        if (
+          code === "PING_EXPIRED" ||
+          code === "OWNER_CHANGED" ||
+          code === "NO_ACTIVE_OWNER" ||
+          code === "SESSION_CLOSED" ||
+          code === "INVALID_COMPLETION_EVENT"
+        ) {
+          this.stopForTerminalError(error);
+          throw error;
+        }
+        if (this.unmounted) {
+          if (drainAcceptedAnswer) throw error;
+          break;
+        }
         await new Promise<void>((resolve) => {
           let waiting = true;
           const retry = () => {
@@ -238,7 +292,10 @@ export default class SurveyScreen extends React.Component<
     drainAcceptedAnswer = false,
   ): Promise<void> {
     const result = this.operations.then(async () => {
-      if (!this.unmounted || drainAcceptedAnswer) {
+      if (
+        (!this.unmounted && this.stoppedError === null) ||
+        drainAcceptedAnswer
+      ) {
         await this.retrySave(operation, drainAcceptedAnswer);
       }
     });
@@ -260,12 +317,16 @@ export default class SurveyScreen extends React.Component<
   private async finishTerminalResume() {
     if (
       this.committedState.currentQuestionData.questionId !== null ||
-      this.completionDelivered
+      this.completionDelivered ||
+      this.stoppedError !== null
     )
       return;
     // The terminal snapshot and ping completion are separate durable writes.
     // Recover if the app closed between them, without changing an existing end time.
-    const savedPing = await secureGetPingAsync(this.props.ping.id);
+    const savedPing = await secureGetPingAsync(
+      this.props.ping.id,
+      this.expectedOwnerId,
+    );
     if (!savedPing)
       throw new Error("Cannot finish a survey whose ping is missing.");
     if (this.unmounted) return;
@@ -273,14 +334,49 @@ export default class SurveyScreen extends React.Component<
       ? savedPing
       : await addEndTimeToPingAsync(
           savedPing.id,
-          new Date(),
+          this.completionRequestedAt(savedPing),
           this.expectedOwnerId,
         );
     if (this.unmounted) return;
-    await clearPingStateAsync(savedPing.id);
+    await clearPingStateAsync(savedPing.id, this.expectedOwnerId);
     if (this.unmounted) return;
     this.completionDelivered = true;
     this.props.onFinish(finishedPing);
+  }
+
+  private completionRequestedAt(ping: Ping): Date {
+    const event =
+      this.committedState.currentQuestionData.extraData[COMPLETION_EVENT_KEY];
+    // Older snapshots did not preserve the click time. Do not invent an earlier
+    // time for them; the journal still enforces the original protocol deadline.
+    if (event === undefined) return new Date();
+    const date = new Date(event?.requestedAt);
+    if (
+      event === null ||
+      typeof event !== "object" ||
+      event.version !== 1 ||
+      event.ownerId !== this.expectedOwnerId ||
+      event.pingId !== ping.id ||
+      typeof event.questionId !== "string" ||
+      !Object.prototype.hasOwnProperty.call(
+        this.props.questions,
+        event.questionId,
+      ) ||
+      typeof event.requestedAt !== "string" ||
+      !Number.isFinite(date.getTime()) ||
+      date.toISOString() !== event.requestedAt ||
+      date.getTime() < ping.startTime.getTime() ||
+      date.getTime() > Date.now() ||
+      this.committedState.nextQuestionsDataStack.length !== 0
+    ) {
+      throw Object.assign(
+        new Error("Invalid terminal completion event; data preserved."),
+        {
+          code: "INVALID_COMPLETION_EVENT",
+        },
+      );
+    }
+    return date;
   }
 
   componentDidMount() {
@@ -288,18 +384,44 @@ export default class SurveyScreen extends React.Component<
       const owner = await getDataOwnerAsync();
       if (this.unmounted) return;
       this.expectedOwnerId = owner.id;
-      const pendingAnswers = acceptedAnswerDrains.get(this.answerLaneKey());
-      if (pendingAnswers) await pendingAnswers;
+      this.pingExpiresAt = await getJournalPingExpiryAsync(
+        this.props.ping.id,
+        owner.id,
+      );
+      if (this.unmounted) return;
+      const drainedAnswers = await waitForSurveyAnswerSavesAsync(
+        owner.id,
+        this.props.ping.id,
+      );
       if (this.unmounted) return;
       // Home may have read its snapshot while the old instance was draining.
       // Re-read after that lane, merging authoritative owner-verified answers.
-      const refreshResume =
-        this.props.previousState !== null || !!pendingAnswers;
-      const initialState = refreshResume
-        ? await getPingStateAsync(this.props.ping.id)
-        : this.committedState;
+      let refreshResume = true;
+      let initialState: SurveyScreenState;
+      try {
+        initialState = await getPingStateAsync(
+          this.props.ping.id,
+          this.expectedOwnerId,
+        );
+      } catch (error) {
+        if (
+          recoveryCode(error) !== "MISSING_RESUME_STATE" ||
+          this.props.previousState !== null ||
+          drainedAnswers
+        )
+          throw error;
+        // Only an explicitly absent resume for a new ping permits a fresh
+        // baseline. An old screen may have finished draining during owner/expiry
+        // lookup, so absence of a currently pending lane is not proof of newness.
+        refreshResume = false;
+        initialState = this.committedState;
+      }
       if (this.unmounted) return;
-      await storePingStateAsync(this.props.ping.id, initialState);
+      await storePingStateAsync(
+        this.props.ping.id,
+        initialState,
+        this.expectedOwnerId,
+      );
       if (this.unmounted) return;
       // No input is accepted without a durable question position to recover.
       // Remount seeded controls if the authoritative answer changed while waiting.
@@ -320,10 +442,6 @@ export default class SurveyScreen extends React.Component<
     });
   }
 
-  private answerLaneKey() {
-    return JSON.stringify([this.expectedOwnerId, this.props.ping.id]);
-  }
-
   private enqueueAcceptedAnswer(
     question: Question,
     realQuestionId: string,
@@ -333,18 +451,28 @@ export default class SurveyScreen extends React.Component<
       date: Date;
     },
   ) {
-    const key = this.answerLaneKey();
-    const previous = acceptedAnswerDrains.get(key);
-    const result = this.enqueue(async () => {
-      if (previous) await previous;
-      await this.saveAnswer(question, realQuestionId, input);
-    }, true);
-    acceptedAnswerDrains.set(key, result);
-    void result.then(() => {
-      if (acceptedAnswerDrains.get(key) === result)
-        acceptedAnswerDrains.delete(key);
-    });
-    return result;
+    // Register immediately, so a remount/logout sees every accepted event even
+    // before this instance's preceding operation reaches native storage.
+    const previousLocalOperation = this.operations;
+    const result = enqueueSurveyAnswerSaveAsync(
+      this.expectedOwnerId!,
+      this.props.ping.id,
+      async () => {
+        await previousLocalOperation;
+        try {
+          await this.retrySave(
+            () => this.saveAnswer(question, realQuestionId, input),
+            true,
+          );
+        } catch (error) {
+          // A post-window event was never a valid accepted response. Do not keep
+          // retrying it or block cleanup of earlier, valid durable responses.
+          if (recoveryCode(error) !== "PING_EXPIRED") throw error;
+        }
+      },
+    );
+    this.operations = result.catch(() => undefined);
+    return this.operations;
   }
 
   componentWillUnmount() {
@@ -771,6 +899,7 @@ export default class SurveyScreen extends React.Component<
           afterDate: addDays(answeredAt, days),
           streamName,
         })),
+        this.expectedOwnerId,
       ),
     );
   }
@@ -782,11 +911,14 @@ export default class SurveyScreen extends React.Component<
   ) {
     if (
       this.unmounted ||
+      this.stoppedError !== null ||
       !this.initialResumeReady ||
       this.navigationPending ||
       generation !== this.questionGeneration
     )
       return;
+    const date = new Date();
+    if (!this.acceptsEventAt(date)) return;
     if (
       mode === "next" &&
       this.dataValidationFunction &&
@@ -802,7 +934,6 @@ export default class SurveyScreen extends React.Component<
       question,
       this.committedState,
     );
-    const date = new Date();
 
     if (
       !NON_USER_QUESTION_TYPES.includes(question.type) &&
@@ -819,6 +950,7 @@ export default class SurveyScreen extends React.Component<
     }
     void this.enqueue(async () => {
       await this.scheduleFollowups(this.committedState);
+      if (this.unmounted || this.stoppedError !== null) return;
       let nextState = this.nextStateAfter(this.committedState);
       const visited = new Set<string>();
       while (
@@ -836,9 +968,30 @@ export default class SurveyScreen extends React.Component<
         visited.add(marker);
         nextState = this.nextStateAfter(nextState);
       }
+      if (nextState.currentQuestionData.questionId === null) {
+        nextState = {
+          ...nextState,
+          currentQuestionData: {
+            questionId: null,
+            extraData: {
+              [COMPLETION_EVENT_KEY]: {
+                version: 1,
+                ownerId: this.expectedOwnerId,
+                pingId: this.props.ping.id,
+                questionId,
+                requestedAt: date.toISOString(),
+              },
+            },
+          },
+        };
+      }
       // Do not display the destination (or complete the ping) until it is durable.
       await this.retrySave(() =>
-        storePingStateAsync(this.props.ping.id, nextState),
+        storePingStateAsync(
+          this.props.ping.id,
+          nextState,
+          this.expectedOwnerId,
+        ),
       );
       if (this.unmounted) return;
       this.dataValidationFunction = null;
@@ -886,7 +1039,9 @@ export default class SurveyScreen extends React.Component<
       answers: { ...this.committedState.answers, [realQuestionId]: answer },
       isInTransition: false,
     };
-    await this.retrySave(() => storePingStateAsync(this.props.ping.id, state));
+    await this.retrySave(() =>
+      storePingStateAsync(this.props.ping.id, state, this.expectedOwnerId),
+    );
     if (!this.unmounted) this.applyCommittedState(state);
   }
 
@@ -906,11 +1061,13 @@ export default class SurveyScreen extends React.Component<
   ): Promise<void> {
     if (
       this.unmounted ||
+      this.stoppedError !== null ||
       !this.initialResumeReady ||
       this.navigationPending ||
       generation !== this.questionGeneration
     )
       return Promise.resolve();
+    if (!this.acceptsEventAt(date)) return Promise.resolve();
     // Values and expanded IDs belong to the event, not to whichever repeated
     // question happens to be visible when the queued native write completes.
     const input = {
@@ -1002,7 +1159,12 @@ export default class SurveyScreen extends React.Component<
       );
 
     const nextButtonIsDisabled = (): boolean => {
-      if (!this.initialResumeReady || this.navigationPending) return true;
+      if (
+        !this.initialResumeReady ||
+        this.navigationPending ||
+        this.stoppedError !== null
+      )
+        return true;
       if (studyInfo.alwaysEnableNextButton) {
         return false;
       }
@@ -1031,7 +1193,11 @@ export default class SurveyScreen extends React.Component<
       <View
         testID="mainSurveyScreenView"
         pointerEvents={
-          !this.initialResumeReady || this.navigationPending ? "none" : "auto"
+          !this.initialResumeReady ||
+          this.navigationPending ||
+          this.stoppedError !== null
+            ? "none"
+            : "auto"
         }
         style={{
           paddingHorizontal: 20,
@@ -1159,7 +1325,11 @@ export default class SurveyScreen extends React.Component<
         </View>
         {question.extraCustomNextWithoutAnsweringButton && (
           <Button
-            disabled={!this.initialResumeReady || this.navigationPending}
+            disabled={
+              !this.initialResumeReady ||
+              this.navigationPending ||
+              this.stoppedError !== null
+            }
             onPress={() => this.onNextSelect("skip", generation)}
             accessibilityLabel={question.extraCustomNextWithoutAnsweringButton}
             title={question.extraCustomNextWithoutAnsweringButton}
@@ -1174,7 +1344,11 @@ export default class SurveyScreen extends React.Component<
           }}
         >
           <Button
-            disabled={!this.initialResumeReady || this.navigationPending}
+            disabled={
+              !this.initialResumeReady ||
+              this.navigationPending ||
+              this.stoppedError !== null
+            }
             onPress={() => this.onNextSelect("preferNotToAnswer", generation)}
             accessibilityLabel="Prefer not to answer the current question"
             title="Prefer not to answer"

@@ -13,7 +13,10 @@ import * as Crypto from "expo-crypto";
 import * as SecureStore from "expo-secure-store";
 import uuid from "react-native-uuid";
 
+import { IS_LOCAL_DEVELOPMENT } from "../../config/local";
+import { ASYNC_STORAGE_WELLPING_PREFIX } from "./asyncStorage/asyncStorageConfig";
 import { getASKeyAsync } from "./asyncStorage/asyncStorage";
+import { getCurrentStudyInfoAsync } from "./asyncStorage/studyFile";
 import { getInstallationIDAsync } from "./debug";
 import {
   clearChunkedValue,
@@ -66,6 +69,7 @@ type Index = {
   version: 1;
   ownerId: string;
   sequence: number;
+  closed: boolean;
   pings: string[];
   answers: Record<string, string[]>;
   revisions: Record<string, number>;
@@ -103,6 +107,16 @@ type Head = {
 const options = {
   keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
 };
+async function setSecureVerified(key: string, value: string) {
+  await SecureStore.setItemAsync(key, value, options);
+  if ((await SecureStore.getItemAsync(key, options)) !== value)
+    recovery("SECURE_WRITE_NOT_DURABLE");
+}
+async function setPlainVerified(key: string, value: string) {
+  await AsyncStorage.setItem(key, value);
+  if ((await AsyncStorage.getItem(key)) !== value)
+    recovery("INDEX_WRITE_NOT_DURABLE");
+}
 const digest = (value: string) =>
   Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, value);
 const isHash = (v: unknown): v is string =>
@@ -266,6 +280,7 @@ function emptyIndex(ownerId: string): Index {
     version: 1,
     ownerId,
     sequence: 0,
+    closed: false,
     pings: [],
     answers: {},
     revisions: {},
@@ -282,6 +297,7 @@ function validateIndex(value: unknown, ownerId: string): Index {
       "version",
       "ownerId",
       "sequence",
+      "closed",
       "pings",
       "answers",
       "revisions",
@@ -293,6 +309,7 @@ function validateIndex(value: unknown, ownerId: string): Index {
     value.version !== 1 ||
     value.ownerId !== ownerId ||
     !isCount(value.sequence) ||
+    typeof value.closed !== "boolean" ||
     !Array.isArray(value.pings) ||
     !value.pings.every(isId) ||
     new Set(value.pings).size !== value.pings.length ||
@@ -425,7 +442,7 @@ async function ensureOwner(context: Context): Promise<void> {
       recovery("ORPHAN_OWNER_DATA");
     entry = { id: context.owner.id, state: "preparing" };
     registry.owners.push(entry);
-    await AsyncStorage.setItem(context.registryKey, JSON.stringify(registry));
+    await setPlainVerified(context.registryKey, JSON.stringify(registry));
   }
   let ownerValue: string | null;
   try {
@@ -481,8 +498,15 @@ async function ensureOwner(context: Context): Promise<void> {
     JSON.stringify(emptyIndex(context.owner.id))
   )
     recovery("UNOWNED_INDEX");
+  if (
+    (await readValue(`${context.base}.owner`)) !==
+      JSON.stringify(context.owner) ||
+    (await readValue(`${context.base}.index`)) !==
+      JSON.stringify(emptyIndex(context.owner.id))
+  )
+    recovery("OWNER_INITIALIZATION_NOT_DURABLE");
   entry.state = "ready";
-  await AsyncStorage.setItem(context.registryKey, JSON.stringify(registry));
+  await setPlainVerified(context.registryKey, JSON.stringify(registry));
 }
 function validateHead(raw: string, ownerId: string): Head {
   const v = parse(raw);
@@ -631,6 +655,12 @@ async function applyTransaction(context: Context, transaction: Transaction) {
     `${context.base}.index`,
     JSON.stringify(transaction.index),
   );
+  if (
+    (await readValue(`${context.base}.index`)) !==
+    JSON.stringify(transaction.index)
+  )
+    recovery("INDEX_VERIFICATION_FAILED");
+  if (transaction.index.closed) await publishClosingPointer(context.owner);
 }
 async function recover(context: Context) {
   const rawHead = await SecureStore.getItemAsync(
@@ -687,11 +717,7 @@ async function recover(context: Context) {
       recovery("JOURNAL_INDEX_DIGEST_MISMATCH");
     await applyTransaction(context, transaction);
     head.state = "applied";
-    await SecureStore.setItemAsync(
-      `${context.base}.head`,
-      JSON.stringify(head),
-      options,
-    );
+    await setSecureVerified(`${context.base}.head`, JSON.stringify(head));
   }
   const index = await readIndex(context);
   if (
@@ -742,20 +768,12 @@ async function commit(context: Context, index: Index, mutations: Mutation[]) {
     indexDigest: await digest(JSON.stringify(next)),
   };
   validateTransaction(raw, head);
-  await SecureStore.setItemAsync(
-    `${context.base}.head`,
-    JSON.stringify(head),
-    options,
-  );
+  await setSecureVerified(`${context.base}.head`, JSON.stringify(head));
   await writeChunkedValue(`${context.base}.wal.${head.id}`, raw);
   if ((await readValue(`${context.base}.wal.${head.id}`)) !== raw)
     recovery("JOURNAL_VERIFICATION_FAILED");
   head.state = "ready";
-  await SecureStore.setItemAsync(
-    `${context.base}.head`,
-    JSON.stringify(head),
-    options,
-  );
+  await setSecureVerified(`${context.base}.head`, JSON.stringify(head));
   await recover(context);
 }
 function run<T>(
@@ -812,6 +830,7 @@ async function getAnswer(
   return raw === null ? null : parseAnswer(raw);
 }
 async function savePing(context: Context, index: Index, ping: Ping) {
+  assertWritable(index);
   const previous = await getPing(context, index, ping.id);
   if (previous) {
     if (
@@ -850,6 +869,13 @@ async function savePing(context: Context, index: Index, ping: Ping) {
         configurable: true,
       });
   }
+  const expiry = index.expiry[ping.id];
+  if (
+    expiry !== null &&
+    (ping.startTime.getTime() > expiry ||
+      (ping.endTime !== null && ping.endTime.getTime() > expiry))
+  )
+    recovery("PING_EXPIRED");
   bump(index, ping.id);
   await commit(context, index, [
     { kind: "ping", pingId: ping.id, value: JSON.stringify(ping) },
@@ -872,8 +898,9 @@ export function insertJournalPingAsync(input: {
   streamName: StreamName;
   operationId?: string;
   expiresAt?: Date;
+  expectedOwnerId?: string;
 }): Promise<Ping> {
-  const { streamName, operationId } = input;
+  const { streamName, operationId, expectedOwnerId } = input;
   const expiresAt = input.expiresAt?.getTime() ?? null;
   const notificationTime = input.notificationTime.getTime(),
     startTime = input.startTime.getTime(),
@@ -928,7 +955,7 @@ export function insertJournalPingAsync(input: {
         endTime: null,
       }),
     );
-  });
+  }, expectedOwnerId);
 }
 export function completeJournalPingAsync(
   pingId: string,
@@ -937,6 +964,7 @@ export function completeJournalPingAsync(
 ): Promise<Ping> {
   const endTime = date.getTime();
   return run(async (context, index) => {
+    assertWritable(index);
     const ping = await getPing(context, index, pingId);
     if (!ping) throw new Error(`pingId ${pingId} not found in getPingsAsync.`);
     if (ping.endTime !== null) return ping;
@@ -964,8 +992,25 @@ export function isJournalPingActiveAsync(
     );
   });
 }
-export function getJournalPingAsync(pingId: string): Promise<Ping | null> {
-  return run((context, index) => getPing(context, index, pingId));
+export function getJournalPingExpiryAsync(
+  pingId: string,
+  expectedOwnerId?: string,
+): Promise<Date | null> {
+  return run(async (context, index) => {
+    if (!(await getPing(context, index, pingId)))
+      recovery("MISSING_INDEXED_PING");
+    const expiry = index.expiry[pingId];
+    return expiry === null ? null : new Date(expiry);
+  }, expectedOwnerId);
+}
+export function getJournalPingAsync(
+  pingId: string,
+  expectedOwnerId?: string,
+): Promise<Ping | null> {
+  return run(
+    (context, index) => getPing(context, index, pingId),
+    expectedOwnerId,
+  );
 }
 export function getJournalAnswerAsync(
   pingId: string,
@@ -980,8 +1025,12 @@ export function storeJournalAnswerAsync(
   const value = JSON.stringify(AnswerSchema.parse(answer));
   const captured = parseAnswer(value);
   return run(async (context, index) => {
+    assertWritable(index);
     if (!(await getPing(context, index, captured.pingId)))
       recovery("ANSWER_WITHOUT_PING");
+    const expiry = index.expiry[captured.pingId];
+    if (expiry !== null && captured.date.getTime() > expiry)
+      recovery("PING_EXPIRED");
     const previous = await getAnswer(
       context,
       index,
@@ -1118,6 +1167,7 @@ export function getJournalAnswerIdsAsync(
 }
 export function markJournalPingDirtyAsync(pingId: string): Promise<void> {
   return run(async (context, index) => {
+    assertWritable(index);
     if (!(await getPing(context, index, pingId)))
       recovery("MISSING_INDEXED_PING");
     if (own(index.dirty, pingId)) return;
@@ -1149,6 +1199,7 @@ export function removeJournalRecordsAsync({
   answersForPing?: boolean;
 }): Promise<void> {
   return run(async (context, index) => {
+    assertWritable(index);
     const mutations: Mutation[] = [];
     for (const id of [...index.pings]) {
       if (!allPings && !allAnswers && id !== pingId) continue;
@@ -1191,4 +1242,459 @@ export function removeJournalRecordsAsync({
     }
     if (mutations.length) await commit(context, index, mutations);
   });
+}
+
+function assertWritable(index: Index) {
+  if (index.closed) recovery("SESSION_CLOSED");
+}
+const namespaceFor = (studyId: string, installationId: string) =>
+  `${
+    IS_LOCAL_DEVELOPMENT ? "WELLPING_LOCAL" : "WELLPING"
+  }-${installationId}-Study_${studyId}.`;
+const prefixFor = (studyId: string) =>
+  `${ASYNC_STORAGE_WELLPING_PREFIX}Study_${studyId}/`;
+const closingKey = (installationId: string) =>
+  `${
+    IS_LOCAL_DEVELOPMENT ? "WELLPING_LOCAL" : "WELLPING"
+  }-${installationId}-dataJournal.v1.logout`;
+type ClosingPointer = {
+  version: 1;
+  ownerId: string;
+  studyId: string;
+  secureNamespace: string;
+};
+async function readClosingPointer(
+  installationId: string,
+): Promise<ClosingPointer | null> {
+  const raw = await SecureStore.getItemAsync(
+    closingKey(installationId),
+    options,
+  );
+  if (raw === null) return null;
+  const value = parse(raw);
+  if (
+    !object(value) ||
+    !keys(value, ["version", "ownerId", "studyId", "secureNamespace"]) ||
+    value.version !== 1 ||
+    !isHash(value.ownerId) ||
+    !isId(value.studyId) ||
+    value.secureNamespace !== namespaceFor(value.studyId, installationId)
+  )
+    recovery("INVALID_LOGOUT_POINTER");
+  return value as ClosingPointer;
+}
+async function publishClosingPointer(owner: DataOwner) {
+  const existing = await readClosingPointer(owner.installationId);
+  if (existing !== null) {
+    if (
+      existing.ownerId !== owner.id ||
+      existing.studyId !== owner.studyId ||
+      existing.secureNamespace !== owner.secureNamespace
+    )
+      recovery("CONFLICTING_LOGOUT_POINTER");
+    return;
+  }
+  await setSecureVerified(
+    closingKey(owner.installationId),
+    JSON.stringify({
+      version: 1,
+      ownerId: owner.id,
+      studyId: owner.studyId,
+      secureNamespace: owner.secureNamespace,
+    }),
+  );
+}
+async function verifyStoredOwner(
+  namespace: string,
+  ownerId: string,
+  studyId: string,
+  installationId: string,
+): Promise<DataOwner> {
+  const raw = await readValue(`${namespace}dataJournal.v1.${ownerId}.owner`);
+  if (raw === null) recovery("MISSING_OWNER_MANIFEST");
+  const owner = parse(raw);
+  if (
+    !object(owner) ||
+    !keys(owner, [
+      "id",
+      "secureNamespace",
+      "studyId",
+      "installationId",
+      "username",
+      "loginDate",
+      "loginSessionId",
+    ]) ||
+    owner.id !== ownerId ||
+    owner.secureNamespace !== namespace ||
+    owner.studyId !== studyId ||
+    owner.installationId !== installationId ||
+    !isId(owner.username) ||
+    !Number.isFinite(owner.loginDate) ||
+    owner.loginSessionId !==
+      `${owner.username}-${installationId}-${owner.loginDate}` ||
+    (await digest(
+      JSON.stringify([
+        namespace,
+        studyId,
+        installationId,
+        owner.username,
+        owner.loginDate,
+      ]),
+    )) !== ownerId
+  )
+    recovery("OWNER_MANIFEST_MISMATCH");
+  return owner as DataOwner;
+}
+async function verifyArchive(context: Context, index: Index) {
+  if (!index.closed || Object.keys(index.dirty).length)
+    recovery("UNVERIFIED_LOGOUT");
+  for (const pingId of index.pings) {
+    await getPing(context, index, pingId);
+    for (const questionId of index.answers[pingId])
+      await getAnswer(context, index, pingId, questionId);
+  }
+}
+/** The caller must drain accepted UI saves before closing. This gate then prevents late writes. */
+export function closeDataSessionAsync(now = new Date()): Promise<DataOwner> {
+  const at = now.getTime();
+  return run(async (context, index) => {
+    if (!Number.isFinite(at)) recovery("INVALID_EXPIRY_CHECK");
+    if (index.closed) {
+      await verifyArchive(context, index);
+      await publishClosingPointer(context.owner);
+      return copy(context.owner);
+    }
+    if (Object.keys(index.dirty).length) recovery("PENDING_RESEARCH_DATA");
+    for (const pingId of index.pings) {
+      const ping = await getPing(context, index, pingId);
+      if (!ping) recovery("MISSING_INDEXED_PING");
+      if (
+        ping.endTime === null &&
+        (index.expiry[pingId] === null ||
+          (index.expiry[pingId] as number) >= at)
+      )
+        recovery("ACTIVE_RESEARCH_DATA");
+      for (const questionId of index.answers[pingId])
+        await getAnswer(context, index, pingId, questionId);
+    }
+    const prior = await readClosingPointer(context.owner.installationId);
+    if (prior !== null && prior.ownerId !== context.owner.id)
+      recovery("CONFLICTING_LOGOUT_POINTER");
+    index.closed = true;
+    await commit(context, index, []);
+    return copy(context.owner);
+  });
+}
+export function isDataSessionClosedAsync(): Promise<boolean> {
+  return run(async (_context, index) => index.closed);
+}
+/** Atomically guards resume writes too. The callback must not call journal APIs. */
+export function withOpenDataSessionAsync<T>(
+  expectedOwnerId: string,
+  operation: () => Promise<T>,
+): Promise<T> {
+  return run(async (_context, index) => {
+    assertWritable(index);
+    return operation();
+  }, expectedOwnerId);
+}
+async function verifiedPendingLogoutInsideLock(): Promise<DataOwner | null> {
+  const installationId = await getInstallationIDAsync();
+  if (!isId(installationId) || installationId === "ASYNCGETINSTALLATIONIDERROR")
+    recovery("INSTALLATION_UNAVAILABLE");
+  let pointer = await readClosingPointer(installationId);
+  if (pointer === null) {
+    // A crash can commit the closed index before publishing the receipt. Only
+    // inspect a real current session and an existing journal; never bootstrap.
+    const currentStudy = await getCurrentStudyInfoAsync();
+    if (currentStudy === null) return null;
+    const currentNamespace = namespaceFor(
+      String(currentStudy.id),
+      installationId,
+    );
+    if (
+      (await SecureStore.getItemAsync(`${currentNamespace}user`, options)) ===
+      null
+    )
+      return null;
+    const current = await captureContext();
+    if (
+      (await SecureStore.getItemAsync(`${current.base}.head`, options)) === null
+    )
+      return null;
+    await verifyStoredOwner(
+      currentNamespace,
+      current.owner.id,
+      current.owner.studyId,
+      installationId,
+    );
+    const registry = await AsyncStorage.getItem(current.registryKey);
+    if (
+      registry === null ||
+      !validateRegistry(parse(registry)).owners.some(
+        (entry) => entry.id === current.owner.id && entry.state === "ready",
+      )
+    )
+      recovery("MISSING_OWNER_REGISTRY");
+    await recover(current);
+    pointer = await readClosingPointer(installationId);
+    if (pointer === null) return null;
+  }
+  const { secureNamespace: namespace, ownerId, studyId } = pointer;
+  const currentStudy = await getCurrentStudyInfoAsync();
+  if (currentStudy !== null && String(currentStudy.id) !== studyId)
+    recovery("LOGOUT_STUDY_MISMATCH");
+  const owner = await verifyStoredOwner(
+    namespace,
+    ownerId,
+    studyId,
+    installationId,
+  );
+  const userRaw = await SecureStore.getItemAsync(`${namespace}user`, options);
+  const active = userRaw === null ? null : parse(userRaw);
+  if (
+    userRaw !== null &&
+    (!object(active) ||
+      active.username !== owner.username ||
+      typeof active.password !== "string" ||
+      active.loginDate !== owner.loginDate)
+  )
+    recovery("LOGOUT_OWNER_MISMATCH");
+  const legacyPrefix = prefixFor(studyId);
+  const registryKey = `${legacyPrefix}dataJournal.v1.owners`;
+  const rawRegistry = await AsyncStorage.getItem(registryKey);
+  if (
+    rawRegistry === null ||
+    !validateRegistry(parse(rawRegistry)).owners.some(
+      (entry) => entry.id === ownerId && entry.state === "ready",
+    )
+  )
+    recovery("MISSING_OWNER_REGISTRY");
+  // No study configuration or credential is required to verify this receipt.
+  // Recover/verify only use the captured namespace, not this minimal study stub.
+  const context: Context = {
+    owner,
+    user: active ?? {
+      username: owner.username,
+      loginDate: owner.loginDate,
+      password: "",
+    },
+    studyInfo: { id: studyId } as StudyInfo,
+    legacyPrefix,
+    registryKey,
+    base: `${namespace}dataJournal.v1.${ownerId}`,
+  };
+  await recover(context);
+  await verifyArchive(context, await readIndex(context));
+  return copy(owner);
+}
+/** Safe without user credentials; never treats an arbitrary historical closed owner as a pending logout. */
+export function getVerifiedPendingLogoutAsync(): Promise<DataOwner | null> {
+  return withDataJournalLockAsync(verifiedPendingLogoutInsideLock);
+}
+export async function hasVerifiedPendingLogoutAsync(): Promise<boolean> {
+  return (await getVerifiedPendingLogoutAsync()) !== null;
+}
+/** Call inside the user-write lane BEFORE saving new credentials, so an old pointer cannot mask a lost new session. */
+export async function clearPendingDataLogoutBeforeLoginInsideLockAsync(): Promise<void> {
+  const owner = await verifiedPendingLogoutInsideLock();
+  if (owner) {
+    await SecureStore.deleteItemAsync(
+      closingKey(owner.installationId),
+      options,
+    );
+    if ((await readClosingPointer(owner.installationId)) !== null)
+      recovery("LOGOUT_POINTER_NOT_CLEARED");
+  }
+}
+/** Captured handle allows finishing teardown even after the study configuration has been removed. */
+export function completeDataLogoutAsync(handle: DataOwner): Promise<void> {
+  const owner = copy(handle);
+  return withDataJournalLockAsync(async () => {
+    if ((await getInstallationIDAsync()) !== owner.installationId)
+      recovery("INSTALLATION_CHANGED");
+    await verifyStoredOwner(
+      owner.secureNamespace,
+      owner.id,
+      owner.studyId,
+      owner.installationId,
+    );
+    const pointer = await readClosingPointer(owner.installationId);
+    if (pointer === null) return;
+    if (pointer.ownerId !== owner.id) recovery("LOGOUT_OWNER_MISMATCH");
+    if (
+      (await SecureStore.getItemAsync(
+        `${owner.secureNamespace}user`,
+        options,
+      )) !== null
+    )
+      recovery("LOGOUT_USER_STILL_PRESENT");
+    const indexValue = await readValue(
+      `${owner.secureNamespace}dataJournal.v1.${owner.id}.index`,
+    );
+    if (indexValue === null) recovery("MISSING_INDEX");
+    const index = validateIndex(parse(indexValue), owner.id);
+    if (!index.closed || Object.keys(index.dirty).length)
+      recovery("UNVERIFIED_LOGOUT");
+    await SecureStore.deleteItemAsync(
+      closingKey(owner.installationId),
+      options,
+    );
+    if ((await readClosingPointer(owner.installationId)) !== null)
+      recovery("LOGOUT_POINTER_NOT_CLEARED");
+  });
+}
+
+async function hasUnresolvedQuarantine(namespace: string): Promise<boolean> {
+  const raw = await AsyncStorage.getItem(
+    `${ASYNC_STORAGE_WELLPING_PREFIX}legacyResumeQuarantineIndex.v1`,
+  );
+  if (raw === null) return false;
+  const entries = parse(raw);
+  const localPrefix = IS_LOCAL_DEVELOPMENT ? "WELLPING_LOCAL-" : "";
+  if (!Array.isArray(entries) || new Set(entries).size !== entries.length)
+    recovery("INVALID_QUARANTINE_INDEX");
+  for (const key of entries) {
+    if (
+      typeof key !== "string" ||
+      !/^(WELLPING_LOCAL-)?legacyResumeQuarantine\.v1\.[a-f0-9]{64}\.[a-f0-9]{64}$/.test(
+        key,
+      ) ||
+      key.startsWith("WELLPING_LOCAL-") !== IS_LOCAL_DEVELOPMENT
+    )
+      recovery("INVALID_QUARANTINE_INDEX");
+    const value = await readValue(key);
+    if (value === null) recovery("MISSING_QUARANTINE_RECORD");
+    const record = parse(value);
+    if (
+      !object(record) ||
+      !keys(record, ["version", "secureScope", "sourceKey", "value"]) ||
+      record.version !== 1 ||
+      typeof record.secureScope !== "string" ||
+      typeof record.sourceKey !== "string" ||
+      typeof record.value !== "string"
+    )
+      recovery("INVALID_QUARANTINE_RECORD");
+    const expected = `${localPrefix}legacyResumeQuarantine.v1.${await digest(
+      JSON.stringify([record.secureScope, record.sourceKey]),
+    )}.${await digest(JSON.stringify(record))}`;
+    if (expected !== key) recovery("INVALID_QUARANTINE_RECORD");
+    if (record.secureScope === namespace) return true;
+  }
+  return false;
+}
+/** Read-only and deliberately non-reentrant: enrollment already owns the shared lane. */
+export async function canEnrollWithClosedArchivesInsideLockAsync(
+  proposedStudyInfo: StudyInfo,
+): Promise<boolean> {
+  const studyInfo = copy(proposedStudyInfo);
+  const studyId = String(studyInfo.id);
+  const installationId = await getInstallationIDAsync();
+  if (!isId(installationId) || installationId === "ASYNCGETINSTALLATIONIDERROR")
+    recovery("INSTALLATION_UNAVAILABLE");
+  const namespace = namespaceFor(studyId, installationId);
+  const legacyPrefix = prefixFor(studyId);
+  const registryKey = `${legacyPrefix}dataJournal.v1.owners`;
+  if (
+    (await readClosingPointer(installationId)) !== null ||
+    (await SecureStore.getItemAsync(`${namespace}user`, options)) !== null ||
+    (await hasUnresolvedQuarantine(namespace))
+  )
+    return false;
+  const allKeys = (await AsyncStorage.getAllKeys()).filter((key) =>
+    key.startsWith(legacyPrefix),
+  );
+  const rawRegistry = await AsyncStorage.getItem(registryKey);
+  if (rawRegistry === null) return allKeys.length === 0;
+  const registry = validateRegistry(parse(rawRegistry));
+  const ids = new Set(registry.owners.map((owner) => owner.id));
+  const resumeIndexKey = `${legacyPrefix}secureResumeIndex.v1`;
+  for (const key of allKeys) {
+    if (key === registryKey || key === resumeIndexKey) continue;
+    const prefix = `${legacyPrefix}FuturePingQueue.v2.`;
+    if (!key.startsWith(prefix) || !ids.has(key.slice(prefix.length)))
+      return false;
+    const raw = await AsyncStorage.getItem(key);
+    if (raw === null) recovery("MISSING_ARCHIVED_QUEUE");
+    const queue = parse(raw);
+    if (
+      !object(queue) ||
+      !keys(queue, ["version", "queue", "completed"]) ||
+      queue.version !== 2 ||
+      !Array.isArray(queue.queue) ||
+      !Array.isArray(queue.completed) ||
+      !queue.completed.every(isId) ||
+      !queue.queue.every(
+        (ping: any) =>
+          object(ping) &&
+          keys(ping, ["streamName", "afterDate"]) &&
+          isId(ping.streamName) &&
+          typeof ping.afterDate === "string" &&
+          Number.isFinite(new Date(ping.afterDate).getTime()),
+      )
+    )
+      recovery("INVALID_ARCHIVED_QUEUE");
+  }
+  const allowedResumeKeys = new Set<string>();
+  for (const entry of registry.owners) {
+    if (entry.state !== "ready") return false;
+    const owner = await verifyStoredOwner(
+      namespace,
+      entry.id,
+      studyId,
+      installationId,
+    );
+    const context: Context = {
+      owner,
+      user: {
+        username: owner.username,
+        loginDate: owner.loginDate,
+        password: "",
+      },
+      studyInfo,
+      legacyPrefix,
+      registryKey,
+      base: `${namespace}dataJournal.v1.${owner.id}`,
+    };
+    if (
+      (await SecureStore.getItemAsync(`${context.base}.head`, options)) !== null
+    )
+      return false;
+    const index = await readIndex(context);
+    if (!index.closed || Object.keys(index.dirty).length) return false;
+    await verifyArchive(context, index);
+    for (const pingId of index.pings)
+      allowedResumeKeys.add(
+        `${
+          IS_LOCAL_DEVELOPMENT ? "WELLPING_LOCAL-" : ""
+        }resume.v1.${await digest(
+          JSON.stringify([namespace, owner.username, owner.loginDate, pingId]),
+        )}`,
+      );
+  }
+  const rawResume = await AsyncStorage.getItem(resumeIndexKey);
+  if (rawResume !== null) {
+    const resumeKeys = parse(rawResume);
+    if (
+      !Array.isArray(resumeKeys) ||
+      new Set(resumeKeys).size !== resumeKeys.length ||
+      !resumeKeys.every(
+        (key) => typeof key === "string" && allowedResumeKeys.has(key),
+      )
+    )
+      return false;
+    for (const key of resumeKeys) {
+      const raw = await readValue(key);
+      if (raw === null) recovery("MISSING_ARCHIVED_RESUME");
+      const state = parse(raw);
+      if (
+        !object(state) ||
+        !object(state.answers) ||
+        !object(state.currentQuestionData) ||
+        !Array.isArray(state.nextQuestionsDataStack)
+      )
+        recovery("INVALID_ARCHIVED_RESUME");
+    }
+  }
+  return true;
 }

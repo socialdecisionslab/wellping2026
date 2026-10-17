@@ -10,9 +10,11 @@ import * as Crypto from "expo-crypto";
 import * as SecureStore from "expo-secure-store";
 
 import { IS_LOCAL_DEVELOPMENT, LOCAL_STORAGE_PREFIX } from "../../config/local";
-import { ASYNC_STORAGE_WELLPING_PREFIX } from "./asyncStorage/asyncStorageConfig";
 import { getCurrentStudyFileAsync } from "./asyncStorage/studyFile";
-import { withDataJournalLockAsync } from "./dataJournal";
+import {
+  canEnrollWithClosedArchivesInsideLockAsync,
+  withDataJournalLockAsync,
+} from "./dataJournal";
 import { getInstallationIDAsync } from "./debug";
 
 const KEY = `${LOCAL_STORAGE_PREFIX}pendingEnrollment.v1`;
@@ -84,15 +86,6 @@ async function readUserAsync(study: StudyFile): Promise<string | null> {
   );
 }
 
-async function hasStudyRecordsAsync(study: StudyFile): Promise<boolean> {
-  const prefix = `${ASYNC_STORAGE_WELLPING_PREFIX}Study_${study.studyInfo.id}/`;
-  // Do not infer that empty, corrupt, legacy, or another owner's records are
-  // disposable. Any study-scoped metadata requires the normal recovery path.
-  return (await AsyncStorage.getAllKeys()).some((key) =>
-    key.startsWith(prefix),
-  );
-}
-
 /** Called only on the explicit initial-login path, before saving its config. */
 export function preparePendingEnrollmentAsync(study: StudyFile): Promise<void> {
   return withDataJournalLockAsync(async () => {
@@ -106,7 +99,7 @@ export function preparePendingEnrollmentAsync(study: StudyFile): Promise<void> {
         (marker?.studyFingerprint !== (await fingerprintAsync(saved)) ||
           marker.studyFingerprint !== studyFingerprint)) ||
       (await readUserAsync(study)) !== null ||
-      (await hasStudyRecordsAsync(study))
+      !(await canEnrollWithClosedArchivesInsideLockAsync(study.studyInfo))
     )
       throw new Error(recoveryMessage);
 
@@ -133,7 +126,7 @@ export function isVerifiedPendingEnrollmentAsync(
       marker.studyFingerprint === fingerprint &&
       (await fingerprintAsync(saved)) === fingerprint &&
       (await readUserAsync(study)) === null &&
-      !(await hasStudyRecordsAsync(study))
+      (await canEnrollWithClosedArchivesInsideLockAsync(study.studyInfo))
     );
   });
 }

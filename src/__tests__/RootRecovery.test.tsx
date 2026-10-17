@@ -10,6 +10,10 @@ import { secureGetUserAsync } from "../helpers/secureStore/user";
 import { getTempStudyFileAsync } from "../helpers/asyncStorage/tempStudyFile";
 import { isVerifiedPendingEnrollmentAsync } from "../helpers/failedEnrollment";
 import { logoutAsync } from "../helpers/users";
+import { getVerifiedPendingLogoutAsync } from "../helpers/dataJournal";
+jest.mock("../helpers/dataJournal", () => ({
+  getVerifiedPendingLogoutAsync: jest.fn().mockResolvedValue(null),
+}));
 jest.mock("../helpers/failedEnrollment", () => ({
   completePendingEnrollmentAsync: jest.fn().mockResolvedValue(undefined),
   isVerifiedPendingEnrollmentAsync: jest.fn().mockResolvedValue(false),
@@ -37,6 +41,8 @@ jest.mock("../helpers/firebase", () => ({
 const study = require("../../local/debug/DEBUG_STUDY.json");
 beforeEach(() => {
   jest.clearAllMocks();
+  (getVerifiedPendingLogoutAsync as jest.Mock).mockResolvedValue(null);
+  (logoutAsync as jest.Mock).mockResolvedValue(undefined);
   (studyFileExistsAsync as jest.Mock).mockResolvedValue(true);
   (getStudyFileAsync as jest.Mock).mockResolvedValue(study);
   (getTempStudyFileAsync as jest.Mock).mockResolvedValue(null);
@@ -81,12 +87,114 @@ test("verified pending enrollment returns to login instead of recovery", async (
   (secureGetUserAsync as jest.Mock).mockResolvedValue(null);
   (isVerifiedPendingEnrollmentAsync as jest.Mock).mockResolvedValueOnce(true);
   const root = new RootScreen({});
-  root.setState = ((next: any) => {
+  root.setState = ((next: any, callback?: () => void) => {
     root.state = { ...root.state, ...next };
+    callback?.();
   }) as any;
   await root.componentDidMount();
   expect(root.state.isLoading).toBe(false);
   expect(root.state.recoveryError).not.toBe(true);
   expect(root.state.userInfo).toBeNull();
   expect(logoutAsync).not.toHaveBeenCalled();
+});
+
+function rootInstance() {
+  const root = new RootScreen({});
+  root.setState = ((next: any, callback?: () => void) => {
+    root.state = { ...root.state, ...next };
+    callback?.();
+  }) as any;
+  return root;
+}
+
+test.each([false, true])(
+  "verified logout resumes before missing credentials/configuration, config present: %s",
+  async (configPresent) => {
+    const owner = {
+      id: "verified-owner",
+      secureNamespace: "verified-namespace",
+    };
+    (getVerifiedPendingLogoutAsync as jest.Mock).mockResolvedValue(owner);
+    (studyFileExistsAsync as jest.Mock).mockResolvedValue(configPresent);
+    (secureGetUserAsync as jest.Mock).mockResolvedValue(null);
+    const root = rootInstance();
+    await root.componentDidMount();
+    expect(logoutAsync).toHaveBeenCalledWith(owner);
+    expect(studyFileExistsAsync).not.toHaveBeenCalled();
+    expect(getStudyFileAsync).not.toHaveBeenCalled();
+    expect(root.state.userInfo).toBeNull();
+    expect(root.state.isLoading).toBe(false);
+    expect(root.state.recoveryError).toBe(false);
+  },
+);
+
+test("unverified logout receipt fails closed instead of deleting or showing login", async () => {
+  (getVerifiedPendingLogoutAsync as jest.Mock).mockRejectedValueOnce(
+    new Error("private damaged receipt"),
+  );
+  const root = rootInstance();
+  await root.componentDidMount();
+  expect(root.state.recoveryError).toBe(true);
+  expect(logoutAsync).not.toHaveBeenCalled();
+  expect(studyFileExistsAsync).not.toHaveBeenCalled();
+});
+
+test("interrupted logout retry remains recoverable and retries the captured owner", async () => {
+  const owner = { id: "verified-owner", secureNamespace: "verified-namespace" };
+  (getVerifiedPendingLogoutAsync as jest.Mock).mockResolvedValue(owner);
+  (logoutAsync as jest.Mock).mockRejectedValueOnce(
+    new Error("storage failure"),
+  );
+  const root = rootInstance();
+  await root.componentDidMount();
+  expect(root.state.recoveryError).toBe(true);
+  await root.componentDidMount();
+  expect(logoutAsync).toHaveBeenNthCalledWith(2, owner);
+  expect(root.state.recoveryError).toBe(false);
+  expect(root.state.isLoading).toBe(false);
+});
+
+test("logout commits a loading gate before draining and restores active UI on refusal", async () => {
+  const root = rootInstance();
+  const activeUser = {
+    username: "synthetic",
+    password: "test-only",
+    loginDate: 1,
+  };
+  root.state = {
+    ...root.state,
+    isLoading: false,
+    userInfo: activeUser,
+    survey: study,
+  };
+  let committed!: () => void;
+  root.setState = ((next: any, callback?: () => void) => {
+    root.state = { ...root.state, ...next };
+    if (callback) committed = callback;
+  }) as any;
+  (logoutAsync as jest.Mock).mockRejectedValueOnce(new Error("unsent data"));
+  const attempt = root.logoutFnAsync();
+  const rejected = expect(attempt).rejects.toThrow(/unsent/);
+  expect(root.state.isLoggingOut).toBe(true);
+  expect(logoutAsync).not.toHaveBeenCalled();
+  committed();
+  await rejected;
+  expect(root.state.isLoggingOut).toBe(false);
+  expect(root.state.userInfo).toEqual(activeUser);
+  expect(root.state.survey).toEqual(study);
+  expect(root.state.logoutError).toBe(true);
+  expect(root.state.recoveryError).toBe(false);
+});
+
+test("logout failure after verified closure presents recovery instead of reopening input", async () => {
+  const root = rootInstance();
+  (getVerifiedPendingLogoutAsync as jest.Mock).mockResolvedValue({
+    id: "closed-owner",
+  });
+  (logoutAsync as jest.Mock).mockRejectedValueOnce(
+    new Error("teardown interrupted"),
+  );
+  await expect(root.logoutFnAsync()).rejects.toThrow();
+  expect(root.state.isLoggingOut).toBe(false);
+  expect(root.state.recoveryError).toBe(true);
 });

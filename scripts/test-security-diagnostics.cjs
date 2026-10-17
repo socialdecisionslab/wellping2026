@@ -82,21 +82,24 @@ function load(file, mocks) {
   }
   let dequeued = false;
   const upload = load("src/helpers/dataUpload.ts", {
-    "./answers": {},
-    "./asyncStorage/unuploadedPingsList": {
-      removeFromUnuploadedPingsListAsync: async () => {
+    "./beiwe": {},
+    "./firebase": {},
+    "./dataJournal": {
+      captureDataSnapshotAsync: async () => ({
+        owner: { username: "fixture", loginSessionId: "synthetic-session" },
+        user: { username: "fixture" },
+        pings: [{ id: "fixture" }],
+        answers: [],
+      }),
+      assertDataOwnerAsync: async () => {},
+      acknowledgeDataSnapshotAsync: async () => {
         dequeued = true;
       },
     },
-    "./beiwe": {},
-    "./firebase": {},
-    "./loginSession": {},
-    "./pings": {},
-    "./secureStore/user": {
-      secureGetUserAsync: async () => ({ username: "fixture" }),
-    },
-    "./server": { isUsingServer: () => false },
+    "./studyFile": { getStudyInfoAsync: async () => ({ server: {} }) },
+    "./server": { isUsingFirebase: () => false, isUsingBeiwe: () => false },
     "./debug": {
+      getUserInstallationInfoAsync: async () => ({ synthetic: true }),
       HOME_SCREEN_DEBUG_VIEW_SYMBOLS: {
         UPLOAD: { UPLOADING: "~", INITIAL: "" },
       },
@@ -105,7 +108,6 @@ function load(file, mocks) {
   await assert.rejects(
     upload.uploadDataAsync({ server: {} }, () => {}, {
       unuploadedOnly: false,
-      prefetchedData: { pings: [{ id: "fixture" }] },
     }),
     /No upload server/,
   );

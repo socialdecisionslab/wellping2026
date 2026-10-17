@@ -3,17 +3,13 @@ import React from "react";
 import { Button, Text, View } from "react-native";
 
 import HomeScreen from "./HomeScreen";
-import { clearCurrentStudyFileAsync } from "./helpers/asyncStorage/studyFile";
 import {
   storeTempStudyFileAsync,
   getTempStudyFileAsync,
   clearTempStudyFileAsync,
 } from "./helpers/asyncStorage/tempStudyFile";
-import {
-  getCriticalProblemTextForUser,
-  alertWithShareButtonContainingDebugInfoAsync,
-  getNonCriticalProblemTextForUser,
-} from "./helpers/debug";
+import { getCriticalProblemTextForUser } from "./helpers/debug";
+import { getVerifiedPendingLogoutAsync } from "./helpers/dataJournal";
 import {
   isVerifiedPendingEnrollmentAsync,
   completePendingEnrollmentAsync,
@@ -43,6 +39,8 @@ interface RootScreenState {
   survey?: StudyFile;
   recoveryError?: boolean;
   updateWarning?: boolean;
+  isLoggingOut?: boolean;
+  logoutError?: boolean;
 }
 
 export default class RootScreen extends React.Component<
@@ -155,6 +153,20 @@ export default class RootScreen extends React.Component<
   }
 
   async initializeAsync() {
+    // Probe the installation-scoped receipt before reading credentials or
+    // configuration: either may already be gone after interrupted teardown.
+    const pendingLogout = await getVerifiedPendingLogoutAsync();
+    if (pendingLogout) {
+      await logoutAsync(pendingLogout);
+      this.setState({
+        userInfo: null,
+        survey: undefined,
+        recoveryError: false,
+        logoutError: false,
+        isLoading: false,
+      });
+      return;
+    }
     if (await studyFileExistsAsync()) {
       const stored = await getStudyFileAsync();
       const savedUser = await secureGetUserAsync();
@@ -201,9 +213,31 @@ export default class RootScreen extends React.Component<
   }
 
   async logoutFnAsync() {
-    // Keep the active session visible if safe logout refuses pending data.
-    await logoutAsync();
-    this.setState({ userInfo: null, survey: undefined });
+    if (this.state.isLoggingOut) return;
+    // Commit the loading view first so Survey unmounts and stops accepting new
+    // events before the detached-save lane is drained and the archive closes.
+    await new Promise<void>((resolve) => {
+      this.setState({ isLoggingOut: true, logoutError: false }, resolve);
+    });
+    try {
+      await logoutAsync();
+      this.setState({
+        userInfo: null,
+        survey: undefined,
+        isLoggingOut: false,
+        logoutError: false,
+      });
+    } catch (error) {
+      let recoveryError = false;
+      try {
+        recoveryError = (await getVerifiedPendingLogoutAsync()) !== null;
+      } catch {
+        // Unreadable close evidence must not expose a potentially closed study.
+        recoveryError = true;
+      }
+      this.setState({ isLoggingOut: false, logoutError: true, recoveryError });
+      throw error;
+    }
   }
 
   render() {
@@ -225,7 +259,7 @@ export default class RootScreen extends React.Component<
         </View>
       );
     }
-    if (isLoading) {
+    if (isLoading || this.state.isLoggingOut) {
       return <LoadingScreen />;
     }
 
@@ -260,6 +294,12 @@ export default class RootScreen extends React.Component<
 
     return (
       <>
+        {this.state.logoutError && (
+          <Text accessibilityRole="alert">
+            Log out did not finish. Your data has been preserved. Complete any
+            survey and sync before trying again.
+          </Text>
+        )}
         {this.state.updateWarning && (
           <Text accessibilityRole="alert">
             A study update could not be applied. Your saved study is still
