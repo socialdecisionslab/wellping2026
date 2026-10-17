@@ -1,5 +1,7 @@
 # Reconciliation of the initial pull requests
 
+This is the historical reconciliation of PRs #1–#4, not the current runtime recommendation. The October 17 modernization stack and PR #5 disposition are tracked in [the current stack review](modernization/stack-review-2026-10-17.md).
+
 ## Decision
 
 Keep the repository's original app baseline and combine its tested recovery/setup improvements with the security-only work. PR #2 also brought 45 upstream commits, including Expo 49, a different interface, and survey-navigation changes. Those changes are not required to settle the three fixes and would broaden the research compatibility review. Its original branch remains available for a separate, incremental modernization effort.
