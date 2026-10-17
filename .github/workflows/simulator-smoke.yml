@@ -53,6 +53,7 @@ jobs:
             ios-first-launch.png
             ios-reopen.png
             simulator-processes.txt
+            simulator-launch.log
           retention-days: 14
       - uses: actions/upload-artifact@v4
         with:

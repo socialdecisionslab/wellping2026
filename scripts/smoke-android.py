@@ -39,7 +39,8 @@ assert any("Prefer not to answer" in label or "Saved on this test device" in tex
 adb("shell", "am", "force-stop", PACKAGE)
 launch()
 reopened = fingerprint(screen("android-reopened.xml"))
-assert reopened == progress, "Saved survey screen changed after force-close and reopen"
+# Choice order is randomized on mount; compare the complete text/label multiset.
+assert sorted(reopened) == sorted(progress), "Saved survey screen changed after force-close and reopen"
 with open("android-reopened.png", "wb") as output:
     subprocess.run(["adb", "exec-out", "screencap", "-p"], stdout=output, check=True)
 Path("android-result.json").write_text(json.dumps({"launch": "passed", "survey_transition": "passed", "force_close_resume": "passed"}, indent=2))
