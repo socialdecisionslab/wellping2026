@@ -12,7 +12,7 @@ Target: first participant use on both iPhone and Android, starting sometime in D
 
 ## October: native builds and study decisions
 
-1. Install full Xcode and Android tooling or configure a lab-owned build service; compile and install this candidate on an iPhone and Android phone. Record OS/model/build identifiers and results.
+1. GitHub-hosted native compilation is configured and has produced both builds. Complete the [device checks](device-testing.md) on physical iPhone and Android phones; record OS/model/build identifiers and results. Apple developer team access is still needed for the intended iPhone distribution route.
 2. Review the existing questionnaire's wording, response choices, branching, sensitive free text, completion time and accessibility. Select study dates, daily reminder windows, expiry and compensation language.
 3. Confirm lab ownership of Apple/Google developer accounts, bundle identifiers, support contact and distribution route. The original Stanford owner/store references are not a new lab release configuration.
 4. Select and configure the study backend, data access, retention and export format. Replace legacy URL-carried credentials with an agreed secure enrollment mechanism. Verify uploads are idempotent and recover after interrupted connections.

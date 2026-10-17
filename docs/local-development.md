@@ -43,7 +43,7 @@ corepack yarn android:local
 
 For a USB Android phone, use `adb reverse tcp:8081 tcp:8081` to reach localhost. A physical iPhone needs Apple signing and a reachable development server; the localhost runner is intended for the simulator. The internal EAS profiles contain only local test builds; cloud account/project setup and physical iPhone signing are not configured by this change. The previous production submission profile was removed because it referenced the original app's store account.
 
-Native project generation and JavaScript compilation are separate from a successful native build. This Mac currently has only Xcode Command Line Tools, no full Xcode, Java runtime, or Android SDK. Device builds, installation, notifications and storage behavior on actual phones remain to be verified.
+Native project generation and JavaScript compilation are separate from a successful native build. This Mac currently has only Xcode Command Line Tools, no full Xcode, Java runtime, or Android SDK. GitHub-hosted native builds now compile the standalone Android APK and iOS simulator app; see [device testing](device-testing.md) for artifacts and verification results. Installation, notifications and storage behavior on physical phones remain to be verified.
 
 ## Verification and limitations
 
