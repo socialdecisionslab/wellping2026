@@ -209,7 +209,7 @@ export default class HomeScreen extends React.Component<
       nextAppState === "active"
     ) {
       // App has come to the foreground.
-      this.checkIfPingHasExpiredAsync();
+      void this.refreshHomeAsync();
     }
     this.setState({ appState: nextAppState });
   };
@@ -249,6 +249,20 @@ export default class HomeScreen extends React.Component<
   }
 
   startup: Promise<void> | null = null;
+  refreshing: Promise<void> | null = null;
+  refreshHomeAsync() {
+    if (this.refreshing) return this.refreshing;
+    this.refreshing = this.checkIfPingHasExpiredAsync()
+      .catch(() => {
+        this.componentWillUnmount();
+        this.setState({ startupError: true, isLoading: false });
+      })
+      .finally(() => {
+        this.refreshing = null;
+      });
+    return this.refreshing;
+  }
+
   componentDidMount() {
     if (this.startup) return this.startup;
     this.startup = this.initializeHomeAsync()
@@ -274,15 +288,15 @@ export default class HomeScreen extends React.Component<
     await setNotificationsAsync();
 
     // Check if the current notification expires.
-    this.interval = setInterval(async () => {
-      await this.checkIfPingHasExpiredAsync();
+    this.interval = setInterval(() => {
+      void this.refreshHomeAsync();
     }, 30 * 1000);
     // Do this initially too.
     await this.checkIfPingHasExpiredAsync();
 
     this.notificationResponseReceivedListener =
-      Notifications.addNotificationResponseReceivedListener(async () => {
-        await this.checkIfPingHasExpiredAsync();
+      Notifications.addNotificationResponseReceivedListener(() => {
+        void this.refreshHomeAsync();
       });
 
     this.appStateSubscription = AppState.addEventListener(

@@ -24,6 +24,8 @@ let resumeReads = 0,
   logoutFails = true,
   alert;
 let drain = async () => {};
+let intervalCallback, notificationCallback, foregroundCallback;
+let removedSubscriptions = 0;
 const state = {
   currentQuestionData: { questionId: "synthetic" },
   nextQuestionsDataStack: [],
@@ -34,7 +36,13 @@ function load(file) {
   const mocks = {
     react,
     "react-native": {
-      AppState: { currentState: "active" },
+      AppState: {
+        currentState: "active",
+        addEventListener: (_event, callback) => {
+          foregroundCallback = callback;
+          return { remove: () => removedSubscriptions++ };
+        },
+      },
       View: "View",
       Text: "Text",
       Button: "Button",
@@ -52,6 +60,19 @@ function load(file) {
         return state;
       },
     },
+    "expo-notifications": {
+      addNotificationResponseReceivedListener: (callback) => {
+        notificationCallback = callback;
+        return { remove: () => removedSubscriptions++ };
+      },
+    },
+    "./helpers/notifications": {
+      setupNotificationsPermissionAsync: async () => true,
+      setNotificationsAsync: async () => {},
+      getCurrentNotificationTimeAsync: async () => null,
+    },
+    "./helpers/pings": { getLatestPingAsync: async () => null },
+    "./helpers/server": { isUsingFirebase: () => false },
     "./helpers/debug": {
       HOME_SCREEN_DEBUG_VIEW_SYMBOLS: { UPLOAD: { INITIAL: "" } },
     },
@@ -95,6 +116,13 @@ function load(file) {
     require: (k) => mocks[k] || {},
     Date,
     console,
+    setInterval: (callback) => {
+      intervalCallback = callback;
+      return 1;
+    },
+    clearInterval: () => {
+      intervalCallback = null;
+    },
   });
   return exports.default;
 }
@@ -172,6 +200,43 @@ function load(file) {
   );
   assert.equal(home.state.expiredIncomplete, false);
   const Root = load("src/RootScreen.tsx");
+  const eventHome = new Home({ studyInfo: {}, streams: {} });
+  eventHome.checkIfPingHasExpiredAsync = async () => {};
+  await eventHome.componentDidMount();
+  let rejectRefresh;
+  let refreshCalls = 0;
+  eventHome.checkIfPingHasExpiredAsync = () => {
+    refreshCalls++;
+    return new Promise((_resolve, reject) => {
+      rejectRefresh = reject;
+    });
+  };
+  const retainedPing = { id: "synthetic-active", endTime: null };
+  eventHome.setState({ appState: "background", currentPing: retainedPing });
+  foregroundCallback("active");
+  intervalCallback();
+  notificationCallback();
+  assert.equal(refreshCalls, 1, "overlapping lifecycle checks are coalesced");
+  const refreshing = eventHome.refreshing;
+  rejectRefresh(Error("SYNTHETIC_SECRET"));
+  await refreshing;
+  assert(eventHome.state.startupError, "callback failures enter recovery");
+  assert.equal(eventHome.state.currentPing, retainedPing);
+  assert.equal(removedSubscriptions, 2);
+  assert.equal(intervalCallback, null);
+  const recoveryView = eventHome.render();
+  assert(!JSON.stringify(recoveryView).includes("SYNTHETIC_SECRET"));
+  assert(JSON.stringify(recoveryView).includes("Nothing has been deleted"));
+  eventHome.checkIfPingHasExpiredAsync = async () => {};
+  recoveryView.children
+    .find((child) => child?.props?.title === "Retry recovery")
+    .props.onPress();
+  await eventHome.startup;
+  assert.equal(eventHome.state.startupError, false);
+  assert.equal(eventHome.state.isLoading, false);
+  assert.equal(typeof intervalCallback, "function");
+  eventHome.componentWillUnmount();
+  assert.equal(removedSubscriptions, 4);
   const root = new Root({});
   root.setState({
     userInfo: { username: "synthetic" },
@@ -183,7 +248,7 @@ function load(file) {
   await root.logoutFnAsync();
   assert.equal(root.state.userInfo, null);
   console.log(
-    "PASS: completed-ping display, recovery retry, safe upload outcomes, failed logout retains session.",
+    "PASS: completed-ping display, recovery retry, safe upload outcomes, failed logout retains session, lifecycle failure recovery and coalescing.",
   );
 })().catch((error) => {
   console.error(error);
