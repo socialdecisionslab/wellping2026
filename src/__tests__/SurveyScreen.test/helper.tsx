@@ -1,12 +1,18 @@
+import { Alert } from "react-native";
 import { Ping, StudyInfo } from "@wellping/study-schemas/lib/types";
 import {
+  act,
   fireEvent,
   waitFor,
   waitForElementToBeRemoved,
   RenderAPI,
-} from "react-native-testing-library";
+} from "@testing-library/react-native";
 import waitForExpect from "wait-for-expect";
 
+import {
+  secureStoreUserAsync,
+  secureClearUserAsync,
+} from "../../helpers/secureStore/user";
 import { getAnswersAsync } from "../../helpers/answers";
 import {
   getAnswersPingIdsQuestionIdsListAsync,
@@ -45,6 +51,11 @@ export async function setUpSurveyScreenTestAsync(): Promise<Ping> {
 
   // Just to make sure.
   await clearAllPingsAndAnswersAsync();
+  await secureStoreUserAsync({
+    username: "test-participant",
+    password: "test-only-not-a-real-secret",
+    loginDate: Date.now() - 30000,
+  });
 
   return await insertPingAsync({
     notificationTime: new Date(Date.now() - 20000),
@@ -132,6 +143,7 @@ export async function tearDownSurveyScreenTestAsync(
   }
 
   await clearAllPingsAndAnswersAsync();
+  await secureClearUserAsync();
 }
 
 /**
@@ -144,7 +156,7 @@ export async function tearDownSurveyScreenTestAsync(
  */
 export async function testCurrentQuestionAsync({
   renderResults: {
-    getByA11yLabel,
+    getByLabelText,
     queryByTestId,
     findByTestId,
     getByTestId,
@@ -191,9 +203,24 @@ export async function testCurrentQuestionAsync({
   const currentQuestionTitle = getCurrentQuestionTitle();
 
   if (nextButton === "next") {
-    fireEvent.press(getByA11yLabel(NEXT_BUTTON_A11YLABEL));
+    fireEvent.press(getByLabelText(NEXT_BUTTON_A11YLABEL));
   } else if (nextButton === "pna") {
-    fireEvent.press(getByA11yLabel(PNA_BUTTON_A11YLABEL));
+    const alertSpy = jest.spyOn(Alert, "alert");
+    fireEvent.press(getByLabelText(PNA_BUTTON_A11YLABEL));
+    await waitFor(() =>
+      expect(alertSpy).toHaveBeenCalledWith(
+        "Are you sure?",
+        "Are you sure you want to skip this question?",
+        expect.any(Array),
+      ),
+    );
+    const buttons = alertSpy.mock.calls[alertSpy.mock.calls.length - 1][2];
+    const confirm = buttons?.find((button) => button.text === "Yes");
+    expect(confirm?.onPress).toBeDefined();
+    await act(async () => {
+      confirm!.onPress!();
+    });
+    alertSpy.mockRestore();
   }
 
   if (waitForAndTestEndPage) {
@@ -251,4 +278,4 @@ export async function testQuestionsSequenceAsync({
 }
 
 export const PART_OF_NON_CRITICAL_ERROR_STRING =
-  "[INTERNAL ERROR (Please screenshot this page";
+  "[An internal error occurred. Please contact the study staff.]";

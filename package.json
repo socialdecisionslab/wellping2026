@@ -21,7 +21,7 @@
     "@react-navigation/native": "^6.1.7",
     "@react-navigation/native-stack": "^6.9.13",
     "@types/babel__core": "^7.20.2",
-    "@wellping/study-schemas": "https://github.com/wellping/study-schemas",
+    "@wellping/study-schemas": "file:vendor/wellping-study-schemas-1.0.0.tgz",
     "date-fns": "^2.14.0",
     "expo": "^49.0.9",
     "expo-app-loading": "^2.1.1",
@@ -64,11 +64,11 @@
     "@expo/ngrok": "^4.1.0",
     "@testing-library/jest-native": "^3.3.0",
     "@testing-library/react-native": "^12.3.0",
-    "@types/jest": "^26.0.9",
+    "@types/jest": "^29.5.3",
     "@types/lodash": "^4.14.158",
     "@types/node": "^14.0.13",
     "@types/react": "~18.2.14",
-    "@types/react-test-renderer": "^17.0.1",
+    "@types/react-test-renderer": "~18.0.0",
     "@typescript-eslint/eslint-plugin": "^5.8.0",
     "@typescript-eslint/parser": "^5.8.0",
     "babel-plugin-transform-typescript-metadata": "^0.3.0",
@@ -79,10 +79,9 @@
     "eslint-plugin-prettier": "^4.0.0",
     "jest": "^29.2.1",
     "jest-date-mock": "^1.0.8",
-    "jest-expo": "^44.0.0",
+    "jest-expo": "~49.0.0",
     "prettier": "^2.5.1",
-    "react-native-testing-library": "^6.0.0",
-    "react-test-renderer": "^17.0.2",
+    "react-test-renderer": "18.2.0",
     "sqlite3": "^5.0.0",
     "typescript": "^5.1.3",
     "wait-for-expect": "^3.0.2"
@@ -92,7 +91,7 @@
     "restoreMocks": true,
     "preset": "jest-expo",
     "transformIgnorePatterns": [
-      "node_modules/(?!((jest-)?react-native|@react-native(-community)?)|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@unimodules/.*|unimodules|sentry-expo|native-base|react-native-svg)"
+      "node_modules/(?!((jest-)?react-native|@react-native(-community)?)|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@unimodules/.*|unimodules|sentry-expo|native-base|react-native-svg|firebase/.*|@firebase/.*)"
     ],
     "moduleFileExtensions": [
       "ts",
@@ -109,6 +108,7 @@
       "<rootDir>/src/__tests__/setupGlobalVariables.js",
       "<rootDir>/src/__tests__/setupAsyncStorage.js",
       "<rootDir>/src/__tests__/setupSecureStore.ts",
+      "<rootDir>/src/__tests__/setupCrypto.ts",
       "jest-date-mock"
     ],
     "setupFilesAfterEnv": [
@@ -125,7 +125,11 @@
       "utility/**/*.{js,jsx,ts,tsx}",
       "!**/__tests__/**",
       "!**/node_modules/**"
-    ]
+    ],
+    "snapshotFormat": {
+      "escapeString": true,
+      "printBasicPrototype": true
+    }
   },
   "private": true,
   "packageManager": "yarn@3.1.1"

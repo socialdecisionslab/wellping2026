@@ -4,7 +4,7 @@ import {
   QuestionTypeType,
 } from "@wellping/study-schemas/lib/types";
 import React from "react";
-import { render } from "react-native-testing-library";
+import { render } from "@testing-library/react-native";
 
 import SurveyScreen, { SurveyScreenProps } from "../../SurveyScreen";
 import { QuestionType } from "../../helpers/helpers";
@@ -50,7 +50,9 @@ test("non-existent startingQuestionId", async () => {
   };
   const { toJSON } = render(<SurveyScreen {...props} />);
 
-  expect(JSON.stringify(toJSON())).toContain("CRITICAL ERROR");
+  expect(JSON.stringify(toJSON())).toContain(
+    "Unable to continue. Please contact the study staff.",
+  );
 
   expect(toJSON()).toMatchSnapshot();
 

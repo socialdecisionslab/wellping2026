@@ -11,13 +11,14 @@ exports[`with constant default value 1`] = `
   <RNCSlider
     accessibilityLabel="slider input"
     disabled={false}
-    enabled={true}
     inverted={false}
+    lowerLimit={-9007199254740991}
     maximumTrackTintColor="#2F2424"
     maximumValue={100}
     minimumTrackTintColor="#2F2424"
     minimumValue={0}
     onChange={[Function]}
+    onRNCSliderAccessibilityAction={null}
     onRNCSliderSlidingComplete={[Function]}
     onRNCSliderSlidingStart={null}
     onRNCSliderValueChange={[Function]}
@@ -30,7 +31,7 @@ exports[`with constant default value 1`] = `
       }
     }
     tapToSeek={false}
-    thumbImage={null}
+    upperLimit={9007199254740991}
     value={25}
   />
   <View
@@ -74,13 +75,14 @@ exports[`with default value from a question with default value with data \`{ val
   <RNCSlider
     accessibilityLabel="slider input"
     disabled={false}
-    enabled={true}
     inverted={false}
+    lowerLimit={-9007199254740991}
     maximumTrackTintColor="#2F2424"
     maximumValue={100}
     minimumTrackTintColor="#2F2424"
     minimumValue={0}
     onChange={[Function]}
+    onRNCSliderAccessibilityAction={null}
     onRNCSliderSlidingComplete={[Function]}
     onRNCSliderSlidingStart={null}
     onRNCSliderValueChange={[Function]}
@@ -93,7 +95,7 @@ exports[`with default value from a question with default value with data \`{ val
       }
     }
     tapToSeek={false}
-    thumbImage={null}
+    upperLimit={9007199254740991}
     value={61}
   />
   <View
@@ -137,13 +139,14 @@ exports[`with default value from a question with default value with data \`null\
   <RNCSlider
     accessibilityLabel="slider input"
     disabled={false}
-    enabled={true}
     inverted={false}
+    lowerLimit={-9007199254740991}
     maximumTrackTintColor="#2F2424"
     maximumValue={100}
     minimumTrackTintColor="#2F2424"
     minimumValue={0}
     onChange={[Function]}
+    onRNCSliderAccessibilityAction={null}
     onRNCSliderSlidingComplete={[Function]}
     onRNCSliderSlidingStart={null}
     onRNCSliderValueChange={[Function]}
@@ -156,7 +159,7 @@ exports[`with default value from a question with default value with data \`null\
       }
     }
     tapToSeek={false}
-    thumbImage={null}
+    upperLimit={9007199254740991}
     value={100}
   />
   <View
@@ -200,13 +203,14 @@ exports[`with default value from a question without default value with data \`{ 
   <RNCSlider
     accessibilityLabel="slider input"
     disabled={false}
-    enabled={true}
     inverted={false}
+    lowerLimit={-9007199254740991}
     maximumTrackTintColor="#2F2424"
     maximumValue={100}
     minimumTrackTintColor="#2F2424"
     minimumValue={0}
     onChange={[Function]}
+    onRNCSliderAccessibilityAction={null}
     onRNCSliderSlidingComplete={[Function]}
     onRNCSliderSlidingStart={null}
     onRNCSliderValueChange={[Function]}
@@ -219,7 +223,7 @@ exports[`with default value from a question without default value with data \`{ 
       }
     }
     tapToSeek={false}
-    thumbImage={null}
+    upperLimit={9007199254740991}
     value={31}
   />
   <View
@@ -263,13 +267,14 @@ exports[`with default value from a question without default value with data \`nu
   <RNCSlider
     accessibilityLabel="slider input"
     disabled={false}
-    enabled={true}
     inverted={false}
+    lowerLimit={-9007199254740991}
     maximumTrackTintColor="#2F2424"
     maximumValue={100}
     minimumTrackTintColor="#2F2424"
     minimumValue={0}
     onChange={[Function]}
+    onRNCSliderAccessibilityAction={null}
     onRNCSliderSlidingComplete={[Function]}
     onRNCSliderSlidingStart={null}
     onRNCSliderValueChange={[Function]}
@@ -282,7 +287,7 @@ exports[`with default value from a question without default value with data \`nu
       }
     }
     tapToSeek={false}
-    thumbImage={null}
+    upperLimit={9007199254740991}
     value={50}
   />
   <View
@@ -326,13 +331,14 @@ exports[`without default value 1`] = `
   <RNCSlider
     accessibilityLabel="slider input"
     disabled={false}
-    enabled={true}
     inverted={false}
+    lowerLimit={-9007199254740991}
     maximumTrackTintColor="#2F2424"
     maximumValue={100}
     minimumTrackTintColor="#2F2424"
     minimumValue={0}
     onChange={[Function]}
+    onRNCSliderAccessibilityAction={null}
     onRNCSliderSlidingComplete={[Function]}
     onRNCSliderSlidingStart={null}
     onRNCSliderValueChange={[Function]}
@@ -345,7 +351,7 @@ exports[`without default value 1`] = `
       }
     }
     tapToSeek={false}
-    thumbImage={null}
+    upperLimit={9007199254740991}
     value={50}
   />
   <View

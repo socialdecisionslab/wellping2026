@@ -8,14 +8,14 @@ import {
   ChoicesList,
 } from "@wellping/study-schemas/lib/types";
 import React from "react";
-import { Alert } from "react-native";
+import { Alert, TextInput } from "react-native";
 import {
   render,
   fireEvent,
   act,
   waitFor,
   RenderAPI,
-} from "react-native-testing-library";
+} from "@testing-library/react-native";
 import waitForExpect from "wait-for-expect";
 
 import { QuestionType } from "../../helpers/helpers";
@@ -27,9 +27,9 @@ const A11Y_HINT = "Enter your answer here";
 const getTextInputA11YLabel = (index: number) => `text input ${index}`;
 const findTextInputAsync = async (
   index: number,
-  { findAllByA11yLabel }: RenderAPI,
+  { findAllByLabelText }: RenderAPI,
 ) => {
-  const textInputs = await findAllByA11yLabel(getTextInputA11YLabel(index));
+  const textInputs = await findAllByLabelText(getTextInputA11YLabel(index));
   expect(textInputs).toHaveLength(1);
   const textInput = textInputs[0];
   return textInput;
@@ -53,6 +53,8 @@ const basicTestForQuestionAsync = async (
 
   const renderResults = render(
     <MultipleTextQuestionScreen
+      realQuestionId={question.id}
+      isDisabled={false}
       key={question.id}
       question={question}
       loadingCompleted={mockLoadingCompleted}
@@ -63,7 +65,7 @@ const basicTestForQuestionAsync = async (
       setDataValidationFunction={mockSetDataValidationFunction}
     />,
   );
-  const { getAllByA11yLabel, getAllByA11yHint, toJSON } = renderResults;
+  const { getAllByLabelText, getAllByA11yHint, toJSON } = renderResults;
 
   let textInputsLength = question.max;
   if (question.maxMinus) {
@@ -75,10 +77,10 @@ const basicTestForQuestionAsync = async (
 
   if (textInputsLength > 0) {
     // Wait for the text fields to be loaded.
-    await waitFor(() => getAllByA11yLabel(/^text input /));
+    await waitFor(() => getAllByLabelText(/^text input /));
   }
 
-  expect(mockLoadingCompleted).toHaveBeenCalledTimes(1);
+  await waitFor(() => expect(mockLoadingCompleted).toHaveBeenCalledTimes(1));
 
   if (textInputsLength === 0) {
     expect(toJSON()).toMatchSnapshot("textInputsLength === 0");
@@ -103,8 +105,10 @@ const basicTestForQuestionAsync = async (
 
   // Called when the dropdown items are changed.
   const mockSetDataValidationFunctionInitTimes = choices ? 2 : 1;
-  expect(mockSetDataValidationFunction).toHaveBeenCalledTimes(
-    mockSetDataValidationFunctionInitTimes,
+  await waitFor(() =>
+    expect(mockSetDataValidationFunction).toHaveBeenCalledTimes(
+      mockSetDataValidationFunctionInitTimes,
+    ),
   );
   expect(typeof codeDataValidationFunction).toBe("function");
 
@@ -170,6 +174,9 @@ const basicTestForQuestionAsync = async (
 
             buttonPressed = true;
           });
+        const nativeInput =
+          renderResults.UNSAFE_getAllByType(TextInput)[i].instance;
+        const clearCallsBefore = nativeInput.clear.mock.calls.length;
         fireEvent(await findIthTextInputAsync(), "onEndEditing", {});
         isInputValid = false;
 
@@ -181,11 +188,11 @@ const basicTestForQuestionAsync = async (
           expect(buttonPressed).toBe(true);
         });
 
-        // Note that we cannot test whether the text field (UI) is cleared, as
-        // we use `ref`s in the app.
-        // See
-        // - https://github.com/facebook/react/issues/7740
-        // - https://github.com/callstack/react-native-testing-library/issues/227
+        // Verify the native clear request and that React does not restore the
+        // rejected text via a controlled value on the following render. Native
+        // pixels still require device testing.
+        expect(nativeInput.clear).toHaveBeenCalledTimes(clearCallsBefore + 1);
+        expect((await findIthTextInputAsync()).props.value).toBeUndefined();
 
         expectedAnswerData.value.pop();
         callCount += 1;
@@ -471,4 +478,43 @@ test.each([
   };
 
   await basicTestForQuestionAsync(question, {}, inputValues);
+});
+
+test("disabled completed question preserves answers and rejects edits", async () => {
+  const question: MultipleTextQuestion = {
+    id: "completedText",
+    type: QuestionType.MultipleText,
+    question: "Previously answered question",
+    max: 2,
+    variableName: "NAME",
+    indexName: "INDEX",
+    next: null,
+  };
+  const onDataChange = jest.fn();
+  const savedAnswer = {
+    questionId: question.id,
+    data: { value: ["Alice", "Bob"] },
+  } as MultipleTextAnswer;
+  const result = render(
+    <MultipleTextQuestionScreen
+      realQuestionId={question.id}
+      question={question}
+      isDisabled={true}
+      loadingCompleted={jest.fn()}
+      onDataChange={onDataChange}
+      allAnswers={{ [question.id]: savedAnswer }}
+      allQuestions={{ [question.id]: question }}
+      pipeInExtraMetaData={simplePipeInExtraMetaData}
+      setDataValidationFunction={jest.fn()}
+    />,
+  );
+
+  for (const [index, value] of ["Alice", "Bob"].entries()) {
+    const input = await findTextInputAsync(index, result);
+    expect(input.props.value).toBe(value);
+    expect(input.props.editable).toBe(false);
+    fireEvent.changeText(input, "changed");
+    expect(input.props.value).toBe(value);
+  }
+  expect(onDataChange).not.toHaveBeenCalled();
 });

@@ -45,7 +45,7 @@ interface HowLongAgoQuestionScreenProps extends QuestionScreenProps {
 // TODO: Add one more question type (something like TwoColumnQuestion) to support something more generic - though keep this HowLongAgo question type and just that new question screen here.
 const HowLongAgoQuestionScreen: React.ElementType<
   HowLongAgoQuestionScreenProps
-> = ({ question, loadingCompleted, onDataChange, pipeInExtraMetaData }) => {
+> = ({ question, loadingCompleted, onDataChange, pipeInExtraMetaData, isDisabled }) => {
   React.useEffect(() => {
     loadingCompleted();
   }, []);
@@ -61,6 +61,7 @@ const HowLongAgoQuestionScreen: React.ElementType<
         data={flatListNumberChoices}
         renderItem={({ item }) => (
           <ChoiceItem
+            disabled={isDisabled}
             id={item.id}
             title={item.title}
             selected={item.id === `${data[0]}`}
@@ -82,6 +83,7 @@ const HowLongAgoQuestionScreen: React.ElementType<
         data={flatListUnitChoices}
         renderItem={({ item }) => (
           <ChoiceItem
+            disabled={isDisabled}
             id={item.id}
             title={item.title}
             selected={item.id === data[1]}

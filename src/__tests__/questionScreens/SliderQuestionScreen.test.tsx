@@ -1,7 +1,7 @@
 import { SliderAnswerData } from "@wellping/study-schemas/lib/answerTypes";
 import { SliderQuestion } from "@wellping/study-schemas/lib/types";
 import React from "react";
-import { render } from "react-native-testing-library";
+import { render } from "@testing-library/react-native";
 
 import { QuestionType } from "../../helpers/helpers";
 import SliderQuestionScreen, {
@@ -68,6 +68,8 @@ test("without default value", async () => {
 
   const renderResults = render(
     <SliderQuestionScreen
+      realQuestionId={WITHOUT_DEFAULT.id}
+      isDisabled={false}
       key={WITHOUT_DEFAULT.id}
       question={WITHOUT_DEFAULT}
       loadingCompleted={mockLoadingCompleted}
@@ -102,6 +104,8 @@ test("with constant default value", async () => {
 
   const renderResults = render(
     <SliderQuestionScreen
+      realQuestionId={WITH_CONSTANT_DEFAULT.id}
+      isDisabled={false}
       key={WITH_CONSTANT_DEFAULT.id}
       question={WITH_CONSTANT_DEFAULT}
       loadingCompleted={mockLoadingCompleted}
@@ -143,6 +147,8 @@ test.each([
 
     const renderResults = render(
       <SliderQuestionScreen
+        realQuestionId={question.id}
+        isDisabled={false}
         key={question.id}
         question={question}
         loadingCompleted={mockLoadingCompleted}
@@ -193,6 +199,8 @@ test("update values", async () => {
 
   const renderResults = render(
     <SliderQuestionScreen
+      realQuestionId={WITHOUT_DEFAULT.id}
+      isDisabled={false}
       key={WITHOUT_DEFAULT.id}
       question={WITHOUT_DEFAULT}
       loadingCompleted={mockLoadingCompleted}

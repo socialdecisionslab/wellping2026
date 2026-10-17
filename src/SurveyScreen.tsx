@@ -1134,7 +1134,9 @@ export default class SurveyScreen extends React.Component<
             </Text>
           </PaperButton> */}
 
-          <Pressable 
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Prefer not to answer the current question"
             onPress={async () => {
               await this.addAnswerToAnswersListAsync(question, {
                 preferNotToAnswer: true,
@@ -1167,7 +1169,10 @@ export default class SurveyScreen extends React.Component<
               </Text>
           </Pressable>
 
-          <Pressable 
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Next question"
+            accessibilityState={{ disabled: nextButtonIsDisabled() }}
             onPress={async () => {
               if (answers[realQuestionId] == null) {
                 // The user clicks "Next" without answering.
