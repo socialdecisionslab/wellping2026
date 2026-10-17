@@ -9,7 +9,10 @@ import {
   clearTempStudyFileAsync,
 } from "./helpers/asyncStorage/tempStudyFile";
 import { getCriticalProblemTextForUser } from "./helpers/debug";
-import { getVerifiedPendingLogoutAsync } from "./helpers/dataJournal";
+import {
+  getDataOwnerAsync,
+  getVerifiedPendingLogoutAsync,
+} from "./helpers/dataJournal";
 import {
   isVerifiedPendingEnrollmentAsync,
   completePendingEnrollmentAsync,
@@ -84,6 +87,12 @@ export default class RootScreen extends React.Component<
     isRedownload,
     handleNetworkErrorAsync,
   }: ParamDownloadAndParseStudyFileAsync): Promise<boolean> {
+    const owner = isRedownload ? await getDataOwnerAsync() : null;
+    if (
+      owner &&
+      (owner.username !== user.username || owner.loginDate !== user.loginDate)
+    )
+      throw new Error("Study refresh belongs to a different session.");
     let rawJsonString: string;
     try {
       rawJsonString = await downloadStudyFileAsync({
@@ -115,7 +124,7 @@ export default class RootScreen extends React.Component<
 
     if (isRedownload) {
       // Store it in temp storage first, parse it next time.
-      await storeTempStudyFileAsync(rawJsonString);
+      await storeTempStudyFileAsync(rawJsonString, owner!.id);
       return true;
     }
 

@@ -6,10 +6,10 @@ Branch: `codex/autonomous-reliability-20261017` in an isolated checkout. Previou
 | Unit | Outcome | Commit / verification |
 | --- | --- | --- |
 | BASE | Inspected lifecycle, storage, CI, history and open PRs; installed pinned environment | Baseline SHA above; 444 tests, 282 snapshots, lint, TypeScript, five security scripts, both bundle graphs and localhost manifests passed |
-| DOCS | Added architecture, roadmap, onboarding, testing, decisions and release gates | Pending commit |
-| OWNER-REFRESH | Bound background study staging to initiating owner under existing journal lock | Pending commit; 17 focused tests passed; regression first reproduced stale writes |
+| DOCS | Added architecture, roadmap, onboarding, testing, decisions and release gates | `db9cb76`; corrected obsolete Yarn commands and security-script count |
+| OWNER-REFRESH | Bound background study staging to initiating owner under existing journal lock | This commit; 17 focused tests, lint, TypeScript, full 33 suites / 451 tests / 282 snapshots and five security scripts passed; regression first reproduced stale writes |
 
-No new dependency, persisted format or backend contract is introduced. Native-device and backend validation remain unverified. Baseline remote native builds and Android smoke passed at inspection; iOS smoke was still pending. New source commits need their own CI runs.
+No new dependency, persisted format or backend contract is introduced. Native-device and backend validation remain unverified. Baseline exact-head native run 39062340822 now passed both builds, Android/iOS smoke and `native-validation` at `ba0e107`. New source commits need their own CI runs.
 
 Known warnings: test-renderer act warnings and dependency peer warnings. Two tooling advisories remain under the approved development-only exception, not remediated by application tests. Real-data retention and participant deployment require separate approvals.
 

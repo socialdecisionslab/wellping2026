@@ -5,13 +5,21 @@ import {
   studyFileExistsAsync,
   getStudyFileAsync,
   parseAndStoreStudyFileAsync,
+  downloadStudyFileAsync,
 } from "../helpers/studyFile";
 import { secureGetUserAsync } from "../helpers/secureStore/user";
-import { getTempStudyFileAsync } from "../helpers/asyncStorage/tempStudyFile";
+import {
+  getTempStudyFileAsync,
+  storeTempStudyFileAsync,
+} from "../helpers/asyncStorage/tempStudyFile";
 import { isVerifiedPendingEnrollmentAsync } from "../helpers/failedEnrollment";
 import { logoutAsync } from "../helpers/users";
-import { getVerifiedPendingLogoutAsync } from "../helpers/dataJournal";
+import {
+  getDataOwnerAsync,
+  getVerifiedPendingLogoutAsync,
+} from "../helpers/dataJournal";
 jest.mock("../helpers/dataJournal", () => ({
+  getDataOwnerAsync: jest.fn(),
   getVerifiedPendingLogoutAsync: jest.fn().mockResolvedValue(null),
 }));
 jest.mock("../helpers/failedEnrollment", () => ({
@@ -41,6 +49,11 @@ jest.mock("../helpers/firebase", () => ({
 const study = require("../../local/debug/DEBUG_STUDY.json");
 beforeEach(() => {
   jest.clearAllMocks();
+  (getDataOwnerAsync as jest.Mock).mockResolvedValue({
+    id: "original-owner",
+    username: "synthetic",
+    loginDate: 1,
+  });
   (getVerifiedPendingLogoutAsync as jest.Mock).mockResolvedValue(null);
   (logoutAsync as jest.Mock).mockResolvedValue(undefined);
   (studyFileExistsAsync as jest.Mock).mockResolvedValue(true);
@@ -106,6 +119,42 @@ function rootInstance() {
   }) as any;
   return root;
 }
+
+test("background download stages using the owner captured before the network response", async () => {
+  let respond!: (value: string) => void;
+  (downloadStudyFileAsync as jest.Mock).mockReturnValueOnce(
+    new Promise<string>((resolve) => {
+      respond = resolve;
+    }),
+  );
+  const attempt = rootInstance().downloadAndParseStudyFileAsync({
+    url: study.studyInfo.studyFileURL,
+    user: { username: "synthetic", password: "test-only", loginDate: 1 },
+    isRedownload: true,
+    handleNetworkErrorAsync: async () => {},
+  });
+  await Promise.resolve();
+  (getDataOwnerAsync as jest.Mock).mockResolvedValue({ id: "new-owner" });
+  respond("synthetic update");
+  await expect(attempt).resolves.toBe(true);
+  expect(storeTempStudyFileAsync).toHaveBeenCalledWith(
+    "synthetic update",
+    "original-owner",
+  );
+});
+
+test("background refresh rejects stale credentials before downloading", async () => {
+  await expect(
+    rootInstance().downloadAndParseStudyFileAsync({
+      url: study.studyInfo.studyFileURL,
+      user: { username: "previous-user", password: "test-only", loginDate: 1 },
+      isRedownload: true,
+      handleNetworkErrorAsync: async () => {},
+    }),
+  ).rejects.toThrow(/different session/);
+  expect(downloadStudyFileAsync).not.toHaveBeenCalled();
+  expect(storeTempStudyFileAsync).not.toHaveBeenCalled();
+});
 
 test.each([false, true])(
   "verified logout resumes before missing credentials/configuration, config present: %s",
