@@ -25,6 +25,8 @@ jobs:
         run: node scripts/check-environment.cjs
       - name: Install exact dependencies
         run: corepack yarn install --immutable
+      - name: Check exact-commit native workflow triggers
+        run: node scripts/check-native-workflows.cjs
       - name: Lint source correctness
         run: corepack yarn lint
       - name: Type-check and test with synthetic data

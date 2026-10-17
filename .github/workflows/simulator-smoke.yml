@@ -5,6 +5,16 @@ on:
     branches:
       [codex/modernize-mobile-runtime, modernization/mobile-foundation-pr7]
     paths:
+      - "App.tsx"
+      - "index.js"
+      - "config/**"
+      - "babel.config.js"
+      - "metro.config.js"
+      - "tsconfig.json"
+      - ".nvmrc"
+      - ".yarnrc.yml"
+      - "vendor/**"
+      - "scripts/babel-strip-console.cjs"
       - ".github/workflows/native-preview.yml"
       - "app.config.js"
       - "app.json"
