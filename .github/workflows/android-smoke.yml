@@ -6,6 +6,9 @@ on:
     paths:
       - '.github/workflows/android-smoke.yml'
       - 'scripts/smoke-android.py'
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
   actions: read
@@ -21,7 +24,14 @@ jobs:
         run: |
           WP_RUN=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/native-preview.yml/runs?branch=$GITHUB_REF_NAME&per_page=1" --jq '.workflow_runs[0].id')
           test "$WP_RUN" != null
-          gh run watch "$WP_RUN" --exit-status --interval 30
+          WP_STATUS=""
+          for WP_ATTEMPT in {1..120}; do
+            WP_STATUS=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$WP_RUN/jobs" --jq '.jobs[] | select(.name == "android") | .conclusion')
+            if [ "$WP_STATUS" = success ]; then break; fi
+            if [ "$WP_STATUS" = failure ] || [ "$WP_STATUS" = cancelled ] || [ "$WP_STATUS" = timed_out ]; then exit 1; fi
+            sleep 30
+          done
+          test "$WP_STATUS" = success
           gh run view "$WP_RUN" --json headSha,url > tested-build.json
           cat tested-build.json
           gh run download "$WP_RUN" -n Well-Ping-Local-Android -D preview
