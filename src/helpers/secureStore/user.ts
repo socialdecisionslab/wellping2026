@@ -1,4 +1,5 @@
 import * as SecureStore from "expo-secure-store";
+import { withDataJournalLockAsync } from "../dataJournal";
 import { logAndThrowError } from "../debug";
 import { getSSKeyAsync } from "./secureStore";
 
@@ -19,10 +20,10 @@ const USER_KEY = `user`;
 
 export async function secureStoreUserAsync(user: User) {
   try {
-    await SecureStore.setItemAsync(
-      await getSSKeyAsync(USER_KEY),
-      JSON.stringify(user),
-    );
+    const value = JSON.stringify(user);
+    await withDataJournalLockAsync(async () => {
+      await SecureStore.setItemAsync(await getSSKeyAsync(USER_KEY), value);
+    });
   } catch (error) {
     logAndThrowError(error);
   }
@@ -30,7 +31,9 @@ export async function secureStoreUserAsync(user: User) {
 
 export async function secureClearUserAsync() {
   try {
-    await SecureStore.deleteItemAsync(await getSSKeyAsync(USER_KEY));
+    await withDataJournalLockAsync(async () => {
+      await SecureStore.deleteItemAsync(await getSSKeyAsync(USER_KEY));
+    });
   } catch (error) {
     logAndThrowError(error);
   }

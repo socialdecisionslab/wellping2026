@@ -1,151 +1,115 @@
 import { StudyInfo } from "@wellping/study-schemas/lib/types";
-
-import { getAnswersAsync } from "./answers";
-import { removeFromUnuploadedPingsListAsync } from "./asyncStorage/unuploadedPingsList";
 import { beiweUploadDataForUserAsync } from "./beiwe";
-import {
-  UserData,
-  UploadData,
-  AllData,
-  UnuploadedData,
-} from "./dataUploadType";
+import { AllData, UnuploadedData } from "./dataUploadType";
 import {
   HOME_SCREEN_DEBUG_VIEW_SYMBOLS,
   getUserInstallationInfoAsync,
 } from "./debug";
 import { firebaseUploadDataForUserAsync } from "./firebase";
-import { getLoginSessionIDAsync } from "./loginSession";
-import { getPingsAsync } from "./pings";
-import { secureGetUserAsync } from "./secureStore/user";
 import {
   isUsingFirebase,
-  isUsingServer,
   isUsingBeiwe,
   DataUploadServerResponse,
 } from "./server";
+import {
+  captureDataSnapshotAsync,
+  acknowledgeDataSnapshotAsync,
+  assertDataOwnerAsync,
+} from "./dataJournal";
+import { getStudyInfoAsync } from "./studyFile";
 
-async function _getUserDataAsync(): Promise<UserData> {
-  const user = await secureGetUserAsync();
-  if (user === null) {
-    throw new Error("user === null in getAllDataAsync");
-  }
-  return {
-    username: user.username,
-    loginSessionId: await getLoginSessionIDAsync(user),
+type Snapshot = Awaited<ReturnType<typeof captureDataSnapshotAsync>>;
+async function payload(
+  snapshot: Snapshot,
+  unuploadedOnly: boolean,
+): Promise<AllData | UnuploadedData> {
+  const user = {
+    username: snapshot.owner.username,
+    loginSessionId: snapshot.owner.loginSessionId,
     installation: await getUserInstallationInfoAsync(),
   };
+  await assertDataOwnerAsync(snapshot.owner);
+  return unuploadedOnly
+    ? {
+        user,
+        unuploadedPings: snapshot.pings,
+        unuploadedAnswers: snapshot.answers,
+      }
+    : { user, pings: snapshot.pings, answers: snapshot.answers };
 }
-
 export async function getAllDataAsync(): Promise<AllData> {
-  const user = await _getUserDataAsync();
-  const pings = await getPingsAsync();
-  const answers = await getAnswersAsync();
-
-  const data: AllData = {
-    user,
-    pings,
-    answers,
-  };
-  return data;
+  return (await payload(await captureDataSnapshotAsync({}), false)) as AllData;
 }
-
 export async function getUnuploadedDataAsync(): Promise<UnuploadedData> {
-  const user = await _getUserDataAsync();
-  const unuploadedPings = await getPingsAsync({ unuploadedOnly: true });
-  const unuploadedAnswers = await getAnswersAsync({ unuploadedOnly: true });
-
-  const data: UnuploadedData = {
-    user,
-    unuploadedPings,
-    unuploadedAnswers,
-  };
-  return data;
+  return (await payload(
+    await captureDataSnapshotAsync({ unuploadedOnly: true }),
+    true,
+  )) as UnuploadedData;
 }
 
-/**
- * Returns a `DataUploadServerResponse` if successful.
- * Throws an error otherwise.
- */
-export async function uploadDataAsync(
+// Serialize network attempts, not storage: new responses remain writable offline.
+let uploads: Promise<unknown> = Promise.resolve();
+export function uploadDataAsync(
   studyInfo: StudyInfo,
   setUploadStatusSymbol: (symbol: string) => void,
-  {
-    unuploadedOnly,
-    prefetchedData,
-  }: {
-    unuploadedOnly: boolean;
-
-    // If we have already gotten the data, we would just use that.
-    prefetchedData?: UploadData;
-  },
+  { unuploadedOnly }: { unuploadedOnly: boolean },
 ): Promise<DataUploadServerResponse> {
-  let data: UploadData;
-  if (prefetchedData) {
-    data = prefetchedData;
-  } else if (unuploadedOnly) {
-    data = await getUnuploadedDataAsync();
-  } else {
-    data = await getAllDataAsync();
-  }
-
-  const startUploading = (): void => {
+  const destination = JSON.parse(JSON.stringify(studyInfo)) as StudyInfo;
+  const snapshotPromise = captureDataSnapshotAsync({ unuploadedOnly });
+  // Attach rejection immediately even if an older network attempt is pending.
+  const prepared = snapshotPromise.then(
+    (snapshot) => ({ snapshot }),
+    (error) => ({ error }),
+  );
+  const operation = uploads.then(async () => {
+    const result = await prepared;
+    if (!("snapshot" in result)) throw result.error;
+    const snapshot = result.snapshot;
+    await assertDataOwnerAsync(snapshot.owner);
+    const current = await getStudyInfoAsync();
+    if (
+      current.id !== destination.id ||
+      JSON.stringify(current.server) !== JSON.stringify(destination.server)
+    )
+      throw new Error(
+        "Study destination changed; responses remain on this device.",
+      );
+    const data = await payload(snapshot, unuploadedOnly);
     setUploadStatusSymbol(HOME_SCREEN_DEBUG_VIEW_SYMBOLS.UPLOAD.UPLOADING);
-  };
-  const endUploading = (errorMessage?: string): void => {
-    setUploadStatusSymbol(
-      errorMessage || HOME_SCREEN_DEBUG_VIEW_SYMBOLS.UPLOAD.END_SUCCESS,
-    );
-
-    // Reset symbol in 3 seconds if no error, and 10 if there was error.
-    setTimeout(
-      () => {
-        setUploadStatusSymbol(HOME_SCREEN_DEBUG_VIEW_SYMBOLS.UPLOAD.INITIAL);
-      },
-      errorMessage ? 10000 : 3000,
-    );
-  };
-
-  const user = await secureGetUserAsync();
-  if (user === null) {
-    endUploading("User===Null");
-    throw new Error("secureGetUserAsync() === null in uploadDataAsync");
-  }
-
-  let response: DataUploadServerResponse = {};
-  if (isUsingServer(studyInfo)) {
-    if (isUsingFirebase(studyInfo)) {
-      response = await firebaseUploadDataForUserAsync(
-        data,
-        user,
-        startUploading,
-        endUploading,
-      );
+    try {
+      let response: DataUploadServerResponse = {};
+      // A backend response is not a local acknowledgement. Report success only
+      // after the exact captured revisions have been durably acknowledged.
+      const started = () => {};
+      const ended = () => {};
+      if (isUsingFirebase(destination))
+        response = await firebaseUploadDataForUserAsync(
+          data,
+          snapshot.user,
+          started,
+          ended,
+          destination,
+        );
+      if (isUsingBeiwe(destination))
+        response = await beiweUploadDataForUserAsync(
+          data,
+          snapshot.user,
+          started,
+          ended,
+          destination,
+        );
+      if (!isUsingFirebase(destination) && !isUsingBeiwe(destination))
+        throw new Error(
+          "No upload server configured. Responses remain saved on this device.",
+        );
+      await acknowledgeDataSnapshotAsync(snapshot);
+      setUploadStatusSymbol(HOME_SCREEN_DEBUG_VIEW_SYMBOLS.UPLOAD.END_SUCCESS);
+      return response;
+    } catch (error) {
+      setUploadStatusSymbol("Retry sync");
+      throw error;
     }
-    if (isUsingBeiwe(studyInfo)) {
-      response = await beiweUploadDataForUserAsync(
-        data,
-        user,
-        startUploading,
-        endUploading,
-      );
-    }
-  } else {
-    startUploading();
-    endUploading(`No Server Set`);
-    throw new Error(
-      "No upload server configured. Responses remain saved on this device.",
-    );
-  }
-
-  // Sucessfully uploaded.
-
-  if (!unuploadedOnly && "pings" in data) {
-    // If we have uploaded all the data, we can remove the uploaded pings from
-    // the unuploaded pings list.
-    const uploadedData = data as AllData;
-    const uploadedPingsList = uploadedData.pings.map((ping) => ping.id);
-    await removeFromUnuploadedPingsListAsync(uploadedPingsList);
-  }
-
-  return response;
+  });
+  uploads = operation.catch(() => undefined);
+  return operation;
 }

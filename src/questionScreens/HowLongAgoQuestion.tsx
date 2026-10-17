@@ -45,15 +45,25 @@ interface HowLongAgoQuestionScreenProps extends QuestionScreenProps {
 // TODO: Add one more question type (something like TwoColumnQuestion) to support something more generic - though keep this HowLongAgo question type and just that new question screen here.
 const HowLongAgoQuestionScreen: React.ElementType<
   HowLongAgoQuestionScreenProps
-> = ({ question, loadingCompleted, onDataChange, pipeInExtraMetaData }) => {
+> = ({ initialAnswer, loadingCompleted, onDataChange }) => {
   React.useEffect(() => {
     loadingCompleted();
   }, []);
 
-  const [data, setData] = React.useState<HowLongAgoAnswerDataType>([
-    null,
-    null,
-  ]);
+  const [data, setData] = React.useState<HowLongAgoAnswerDataType>(() => {
+    const savedValue = initialAnswer?.data?.value;
+    if (
+      Array.isArray(savedValue) &&
+      savedValue.length === 2 &&
+      (savedValue[0] === null || typeof savedValue[0] === "number") &&
+      (savedValue[1] === null || typeof savedValue[1] === "string")
+    ) {
+      return [savedValue[0], savedValue[1]];
+    }
+    return [null, null];
+  });
+
+  const latestData = React.useRef(data);
 
   return (
     <View style={{ flexDirection: "row", paddingVertical: 5 }}>
@@ -67,8 +77,9 @@ const HowLongAgoQuestionScreen: React.ElementType<
             onSelect={() => {
               const newData: HowLongAgoAnswerDataType = [
                 Number(item.id),
-                data[1],
+                latestData.current[1],
               ];
+              latestData.current = newData;
               setData(newData);
               onDataChange({ value: newData } as HowLongAgoAnswerData);
             }}
@@ -86,7 +97,11 @@ const HowLongAgoQuestionScreen: React.ElementType<
             title={item.title}
             selected={item.id === data[1]}
             onSelect={() => {
-              const newData: HowLongAgoAnswerDataType = [data[0], item.id];
+              const newData: HowLongAgoAnswerDataType = [
+                latestData.current[0],
+                item.id,
+              ];
+              latestData.current = newData;
               setData(newData);
               onDataChange({ value: newData } as HowLongAgoAnswerData);
             }}

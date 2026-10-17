@@ -5,12 +5,12 @@ import { clearCurrentStudyFileAsync } from "./asyncStorage/studyFile";
 import { clearTempStudyFileAsync } from "./asyncStorage/tempStudyFile";
 import { getUnuploadedPingsListAsync } from "./asyncStorage/unuploadedPingsList";
 import { beiweLoginAsync } from "./beiwe";
-import { clearAllPingsAndAnswersAsync } from "./cleanup";
 import {
   firebaseLoginAsync,
   firebaseLogoutAndDeleteAppAsync,
   firebaseInitialized,
 } from "./firebase";
+import { isJournalPingActiveAsync } from "./dataJournal";
 import { getPingsAsync } from "./pings";
 import {
   secureStoreUserAsync,
@@ -43,7 +43,10 @@ export async function logoutAsync() {
   if (await studyFileExistsAsync()) {
     const unuploaded = await getUnuploadedPingsListAsync();
     const pings = await getPingsAsync();
-    if (unuploaded.length > 0 || pings.some((ping) => !ping.endTime)) {
+    const active = await Promise.all(
+      pings.map((ping) => isJournalPingActiveAsync(ping.id)),
+    );
+    if (unuploaded.length > 0 || active.some(Boolean)) {
       throw new Error(
         "Cannot log out while responses are unsent or a survey is in progress. Complete the survey and sync before logging out. Your data has been preserved.",
       );
@@ -56,9 +59,8 @@ export async function logoutAsync() {
     await firebaseLogoutAndDeleteAppAsync();
   }
 
-  if (await studyFileExistsAsync()) {
-    await clearAllPingsAndAnswersAsync();
-  }
+  // Keep encrypted owner-isolated records for explicit recovery/export.
+  // Authentication teardown must never partially erase research observations.
 
   await clearTempStudyFileAsync();
 

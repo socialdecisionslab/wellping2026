@@ -44,6 +44,7 @@ function load(file) {
       },
     },
     "./helpers/asyncStorage/pingState": {
+      MissingResumeStateError: class extends Error {},
       async getPingStateAsync() {
         resumeReads++;
         if (resumeFails) throw Error("SYNTHETIC_SECRET");

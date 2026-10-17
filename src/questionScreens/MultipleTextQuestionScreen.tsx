@@ -23,6 +23,7 @@ const MultipleTextQuestionScreen: React.ElementType<
   MultipleTextQuestionScreenProps
 > = ({
   question,
+  initialAnswer,
   loadingCompleted,
   onDataChange,
   allAnswers,
@@ -47,9 +48,21 @@ const MultipleTextQuestionScreen: React.ElementType<
     }
   }
 
-  const initTextValues = Array(numberOfTextFields).fill("");
+  const [initTextValues] = React.useState<string[]>(() => {
+    const savedValue = initialAnswer?.data?.value;
+    const savedTextValues =
+      Array.isArray(savedValue) &&
+      savedValue.every((value) => typeof value === "string")
+        ? (savedValue as string[])
+        : [];
+    return Array.from(
+      { length: numberOfTextFields },
+      (_, index) => savedTextValues[index] ?? "",
+    );
+  });
 
   const [textValues, setTextValues] = React.useState<string[]>(initTextValues);
+  const latestTextValues = React.useRef(initTextValues);
 
   const [textFieldsDropdownItems, setTextFieldsDropdownItems] = React.useState<
     DropdownItem[]
@@ -94,8 +107,9 @@ const MultipleTextQuestionScreen: React.ElementType<
   }, [textValues, textFieldsDropdownItems]);
 
   const updateTextValue = (text: string, index: number) => {
-    const newTextValues: string[] = cloneDeep(textValues);
+    const newTextValues: string[] = cloneDeep(latestTextValues.current);
     newTextValues[index] = text.trim();
+    latestTextValues.current = newTextValues;
     setTextValues(newTextValues);
 
     const nonEmptyFields = newTextValues.filter(Boolean);
@@ -105,7 +119,7 @@ const MultipleTextQuestionScreen: React.ElementType<
 
   const [isInputEmpty, setIsInputEmpty] = React.useState<{
     [index: number]: boolean;
-  }>(Array(numberOfTextFields).fill(true));
+  }>(initTextValues.map((value) => value.length === 0));
 
   const textFields: React.ReactElement[] = [];
   // https://stackoverflow.com/a/56063129/2603230
@@ -146,6 +160,8 @@ const MultipleTextQuestionScreen: React.ElementType<
             textFieldsRef.current[index] = ref;
           },
           placeholder: question.placeholder,
+          // Seed the native input once; do not force its value while typing.
+          defaultValue: initTextValues[index],
           underlineColorAndroid: "transparent",
           style: {
             paddingVertical: Platform.OS === "android" ? 0 : 10,
@@ -158,10 +174,10 @@ const MultipleTextQuestionScreen: React.ElementType<
           keyboardType: question.keyboardType || "default",
           returnKeyType: index === numberOfTextFields - 1 ? "done" : "next",
           onChangeText: (text: string) => {
-            setIsInputEmpty({
-              ...isInputEmpty,
+            setIsInputEmpty((previous) => ({
+              ...previous,
               [index]: text.trim().length === 0,
-            });
+            }));
 
             updateTextValue(text, index);
           },
@@ -197,7 +213,7 @@ const MultipleTextQuestionScreen: React.ElementType<
       return false;
     }
 
-    const invalidValues = textValues.filter((value) => {
+    const invalidValues = latestTextValues.current.filter((value) => {
       // If the text value is not empty and is not in the items list.
       return value && !textFieldsDropdownNames.includes(value);
     });
@@ -209,7 +225,7 @@ const MultipleTextQuestionScreen: React.ElementType<
 
     // We clear the values first so that there will not be duplicate alerts.
     const invalidValuesIndices = invalidValues.map((value) =>
-      textValues.indexOf(value),
+      latestTextValues.current.indexOf(value),
     );
     invalidValuesIndices.forEach((index) => {
       textFieldsRef.current[index]?.clear();

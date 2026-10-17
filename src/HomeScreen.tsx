@@ -23,15 +23,22 @@ import {
 } from "react-native";
 import DashboardComponent from "./components/DashboardComponent";
 import { getAnswersPingIdsQuestionIdsListAsync } from "./helpers/asyncStorage/answersPingIdsQuestionIdsList";
-import { dequeueFuturePingIfAny } from "./helpers/asyncStorage/futurePings";
+import {
+  peekFuturePingIfAny,
+  acknowledgeFuturePingAsync,
+} from "./helpers/asyncStorage/futurePings";
 import { getPingsListAsync } from "./helpers/asyncStorage/pingsList";
-import { getPingStateAsync } from "./helpers/asyncStorage/pingState";
+import {
+  getPingStateAsync,
+  MissingResumeStateError,
+} from "./helpers/asyncStorage/pingState";
 import {
   addToUnuploadedPingsListIfNeededAsync,
   getUnuploadedPingsListAsync,
-  removeFromUnuploadedPingsListAsync,
 } from "./helpers/asyncStorage/unuploadedPingsList";
-import { getUnuploadedDataAsync, uploadDataAsync } from "./helpers/dataUpload";
+import { isJournalPingActiveAsync } from "./helpers/dataJournal";
+import { getNotificationTimesAsync } from "./helpers/asyncStorage/notificationTimes";
+import { uploadDataAsync } from "./helpers/dataUpload";
 import {
   alertWithShareButtonContainingDebugInfoAsync,
   getNonCriticalProblemTextForUser,
@@ -89,6 +96,8 @@ interface HomeScreenState {
   firebaseUser: FirebaseUser | null;
 
   resumeError: boolean;
+  startupError?: boolean;
+  expiredIncomplete?: boolean;
 }
 
 export default class HomeScreen extends React.Component<
@@ -131,7 +140,12 @@ export default class HomeScreen extends React.Component<
     if (currentNotificationTimeNumber !== previousNotificationTimeNumber) {
       // It means that the previous ping has ended. We are either in between
       // two pings or in a new ping. So we can reset `currentPing` state.
-      this.setState({ currentPing: null });
+      this.setState({
+        currentPing: null,
+        expiredIncomplete:
+          this.state.expiredIncomplete ||
+          !!(this.state.currentPing && !this.state.currentPing.endTime),
+      });
     }
 
     await clearSentNotificationsAsync();
@@ -148,8 +162,11 @@ export default class HomeScreen extends React.Component<
     this.setState({ appState: nextAppState });
   };
 
-  notificationResponseReceivedListener: ReturnType<typeof Notifications.addNotificationResponseReceivedListener> | null = null;
-  appStateSubscription: ReturnType<typeof AppState.addEventListener> | null = null;
+  notificationResponseReceivedListener: ReturnType<
+    typeof Notifications.addNotificationResponseReceivedListener
+  > | null = null;
+  appStateSubscription: ReturnType<typeof AppState.addEventListener> | null =
+    null;
   unregisterAuthObserver: FirebaseUnsubscribe | null = null;
   async restorePingAsync(ping: Ping) {
     try {
@@ -161,14 +178,42 @@ export default class HomeScreen extends React.Component<
         currentPing: ping,
         resumeError: false,
       });
-    } catch (_) {
+    } catch (error) {
+      if (
+        error instanceof MissingResumeStateError &&
+        (await getAnswersPingIdsQuestionIdsListAsync()).every(
+          ([id]) => id !== ping.id,
+        )
+      ) {
+        this.setState({
+          currentPing: ping,
+          storedPingStateAsync: null,
+          resumeError: false,
+        });
+        return;
+      }
       this.setState({ currentPing: ping, resumeError: true });
     }
   }
 
-  async componentDidMount() {
+  startup: Promise<void> | null = null;
+  componentDidMount() {
+    if (this.startup) return this.startup;
+    this.startup = this.initializeHomeAsync()
+      .catch(() => {
+        this.componentWillUnmount();
+        this.setState({ startupError: true, isLoading: false });
+      })
+      .finally(() => {
+        this.startup = null;
+      });
+    return this.startup;
+  }
+
+  async initializeHomeAsync() {
     const { studyInfo } = this.props;
 
+    const latestPing = await getLatestPingAsync();
     const allowsNotifications = await setupNotificationsPermissionAsync();
     if (!allowsNotifications) {
       this.setState({ allowsNotifications: false });
@@ -188,10 +233,12 @@ export default class HomeScreen extends React.Component<
         await this.checkIfPingHasExpiredAsync();
       });
 
-    this.appStateSubscription = AppState.addEventListener("change", this._handleAppStateChange);
+    this.appStateSubscription = AppState.addEventListener(
+      "change",
+      this._handleAppStateChange,
+    );
 
-    const latestPing = await getLatestPingAsync();
-    //console.warn(latestStartedPing);
+    // Recover before presenting participant actions.
     const currentNotificationTime = await getCurrentNotificationTimeAsync();
     if (
       latestPing &&
@@ -200,6 +247,10 @@ export default class HomeScreen extends React.Component<
         currentNotificationTime.getTime()
     ) {
       await this.restorePingAsync(latestPing);
+    } else if (latestPing && !latestPing.endTime) {
+      if (await isJournalPingActiveAsync(latestPing.id))
+        throw new Error("An unfinished survey window needs recovery.");
+      this.setState({ expiredIncomplete: true });
     }
 
     if (isUsingFirebase(studyInfo) && firebaseInitialized()) {
@@ -274,17 +325,34 @@ export default class HomeScreen extends React.Component<
     clearInterval(this.interval);
 
     this.appStateSubscription?.remove();
+    this.appStateSubscription = null;
 
     if (this.unregisterAuthObserver) {
       this.unregisterAuthObserver();
+      this.unregisterAuthObserver = null;
     }
 
     if (this.notificationResponseReceivedListener) {
       this.notificationResponseReceivedListener.remove();
+      this.notificationResponseReceivedListener = null;
     }
   }
 
-  async startSurveyAsync() {
+  startingSurvey: Promise<void> | null = null;
+  startSurveyAsync() {
+    if (this.startingSurvey) return this.startingSurvey;
+    this.startingSurvey = this.beginSurveyAsync()
+      .catch(() => {
+        this.setState({ startupError: true, isLoading: false });
+      })
+      .finally(() => {
+        this.startingSurvey = null;
+      });
+    return this.startingSurvey;
+  }
+
+  async beginSurveyAsync() {
+    let followupOperationId: string | undefined;
     await new Promise<void>((resolve) =>
       this.setState({ isLoading: true }, resolve),
     );
@@ -319,14 +387,17 @@ export default class HomeScreen extends React.Component<
           newStreamName,
         )
       ) {
-        const futurePingIfAny = await dequeueFuturePingIfAny();
+        const futurePingIfAny = await peekFuturePingIfAny();
         if (futurePingIfAny) {
           newStreamName = futurePingIfAny.streamName;
+          followupOperationId = futurePingIfAny.operationId;
         }
       }
     }
 
-    await this._startSurveyTypeAsync(newStreamName);
+    await this._startSurveyTypeAsync(newStreamName, followupOperationId);
+    if (followupOperationId)
+      await acknowledgeFuturePingAsync(followupOperationId);
 
     // TODO: should this be after setNotificationsAsync?
     await new Promise<void>((resolve) =>
@@ -349,19 +420,10 @@ export default class HomeScreen extends React.Component<
     doFinally?: () => void;
   } = {}) {
     const { studyInfo } = this.props;
-    // We need to store `prevUnuploaded` beforehand because unuploaded pings list
-    // might be changed during we are doing `uploadDataAsync`. And we don't want
-    // to remove the newly added pings that we haven't uploaded.
-    const prevUnuploaded = await getUnuploadedPingsListAsync();
-    const prevData = await getUnuploadedDataAsync();
-    uploadDataAsync(studyInfo, this.setUploadStatusSymbol, {
+    return uploadDataAsync(studyInfo, this.setUploadStatusSymbol, {
       unuploadedOnly: true,
-      // We do this to avoid the data being modified before being uploaded.
-      prefetchedData: prevData,
     })
       .then(async (response) => {
-        // We have to use `.then` here because we don't want to block.
-        await removeFromUnuploadedPingsListAsync(prevUnuploaded);
         await doAfterResponseAsync(response);
       })
       .catch(async (e) => {
@@ -375,16 +437,24 @@ export default class HomeScreen extends React.Component<
       });
   }
 
-  async _startSurveyTypeAsync(streamName: StreamName) {
-    // Upload and clear old unuploaded pings.
-    await this._uploadUnuploadedDataAndRemoveFromThemIfSuccessfulAsync();
+  async _startSurveyTypeAsync(streamName: StreamName, operationId?: string) {
+    // Starting an offline survey must not wait for an unrelated network request.
+    void this._uploadUnuploadedDataAndRemoveFromThemIfSuccessfulAsync().catch(
+      () => undefined,
+    );
 
     // Create new ping.
     const { currentNotificationTime } = this.state;
+    const schedule = await getNotificationTimesAsync();
+    const expiresAt = schedule?.find(
+      (item) => +item.notificationDate === +currentNotificationTime!,
+    )?.expirationDate;
     const newPing = await insertPingAsync({
       notificationTime: currentNotificationTime!,
       startTime: new Date(),
       streamName,
+      operationId,
+      expiresAt,
     });
 
     // Add this ping to unuploaded pings list.
@@ -414,6 +484,13 @@ export default class HomeScreen extends React.Component<
     }
   }
 
+  async syncCompletedSurveyAsync() {
+    this.setState({ afterFinishingPing_isUploading: true });
+    await this._uploadUnuploadedDataAndRemoveFromThemIfSuccessfulAsync({
+      doFinally: () => this.setState({ afterFinishingPing_isUploading: false }),
+    });
+  }
+
   render() {
     const { studyInfo, streams } = this.props;
 
@@ -425,6 +502,23 @@ export default class HomeScreen extends React.Component<
       isLoading,
     } = this.state;
 
+    if (this.state.startupError) {
+      return (
+        <View style={{ padding: 24 }}>
+          <Text accessibilityRole="alert">
+            Saved study data needs recovery. Nothing has been deleted. Retry or
+            contact study staff.
+          </Text>
+          <Button
+            title="Retry recovery"
+            onPress={() => {
+              this.setState({ startupError: false, isLoading: true });
+              void this.componentDidMount();
+            }}
+          />
+        </View>
+      );
+    }
     if (this.state.resumeError) {
       return (
         <View style={{ padding: 24 }}>
@@ -450,6 +544,13 @@ export default class HomeScreen extends React.Component<
     // Diagnostics and data-export controls are intentionally absent from the app.
     const ExtraView = (
       <View>
+        {this.state.expiredIncomplete && (
+          <Text accessibilityRole="alert">
+            An earlier survey window ended before completion. Its saved
+            responses are preserved as incomplete and can still sync; new
+            answers cannot be added after the window closes.
+          </Text>
+        )}
         {!allowsNotifications && (
           <Text>
             Please allow notifications if you would like study reminders.
@@ -588,24 +689,27 @@ export default class HomeScreen extends React.Component<
       return (
         <View style={{ height: "100%" }}>
           {ExtraView}
-          {this.state.afterFinishingPing_isUploading ? (
-            <Text style={{ ...styles.onlyTextStyle, color: "red" }}>
-              Uploading…{"\n"}Please do not exit the app!
-            </Text>
-          ) : (
-            <>
-              <Text style={styles.onlyTextStyle}>
-                Thank you for completing the survey for this ping!{"\n"}
-                Well Ping will send a notification for the next survey soon!
-                {"\n"}
-                Please close the app entirely.
-              </Text>
-              <DashboardComponent
-                firebaseUser={firebaseUser}
-                studyInfo={studyInfo}
-              />
-            </>
-          )}
+          <Text style={styles.onlyTextStyle}>
+            Thank you for completing the survey for this ping!{"\n"}
+            Your responses are saved on this device. You can close the app
+            safely.
+          </Text>
+          <Text accessibilityLiveRegion="polite">
+            {this.state.afterFinishingPing_isUploading
+              ? "Sync is in progress. Saved responses remain available offline."
+              : "Open the app with a connection to retry any pending sync."}
+          </Text>
+          <Button
+            title="Retry sync"
+            disabled={this.state.afterFinishingPing_isUploading}
+            onPress={() => {
+              void this.syncCompletedSurveyAsync();
+            }}
+          />
+          <DashboardComponent
+            firebaseUser={firebaseUser}
+            studyInfo={studyInfo}
+          />
         </View>
       );
     }
@@ -625,81 +729,7 @@ export default class HomeScreen extends React.Component<
               currentPing: finishedPing,
               afterFinishingPing_isUploading: true,
             });
-            // TODO: Maybe also use NetInfo.fetch() before to make sure don't stuck on this page. But that's probably unnecessary.
-            this._uploadUnuploadedDataAndRemoveFromThemIfSuccessfulAsync({
-              doAfterResponseAsync: async (response) => {
-                const showDataDiscrepancyAlert = ({
-                  serverPingsCount,
-                  localPingsCount,
-                  serverAnswersCount,
-                  localAnswersCount,
-                }: {
-                  serverPingsCount?: number;
-                  localPingsCount?: number;
-                  serverAnswersCount?: number;
-                  localAnswersCount?: number;
-                }) => {
-                  const serverInfo =
-                    `p${serverPingsCount ?? "n"}/` +
-                    `a${serverAnswersCount ?? "n"}`;
-                  const localInfo =
-                    `p${localPingsCount ?? "n"}/` +
-                    `a${localAnswersCount ?? "n"}`;
-
-                  Alert.alert(
-                    "Data Discrepancy Detected",
-                    `The data on your phone locally (${localInfo}) does not match the data we have on the server (${serverInfo}). ` +
-                      "To ensure your answers are recorded correctly, please click the “Upload All Data” button below.\n\n" +
-                      "During upload, your phone might be unresponsive for several minutes. " +
-                      "Please do not exit the app until you see a message telling you that the upload is complete.",
-                    [
-                      {
-                        text: "Upload All Data",
-                        onPress: async () => {
-                          this.setState({
-                            afterFinishingPing_isUploading: true,
-                          });
-                          await this._forceUploadAllDataAsync();
-                          this.setState({
-                            afterFinishingPing_isUploading: false,
-                          });
-                        },
-                      },
-                    ],
-                  );
-                };
-
-                const serverPingsCount = response.new_pings_count;
-                if (serverPingsCount != null) {
-                  const localPingsCount = (await getPingsListAsync()).length;
-                  if (serverPingsCount !== localPingsCount) {
-                    showDataDiscrepancyAlert({
-                      serverPingsCount,
-                      localPingsCount,
-                    });
-                    return;
-                  }
-                }
-
-                const serverAnswersCount = response.new_answers_count;
-                if (serverAnswersCount != null) {
-                  const localAnswersCount = (
-                    await getAnswersPingIdsQuestionIdsListAsync()
-                  ).length;
-                  if (serverAnswersCount !== localAnswersCount) {
-                    showDataDiscrepancyAlert({
-                      serverPingsCount,
-                      serverAnswersCount,
-                      localAnswersCount,
-                    });
-                    return;
-                  }
-                }
-              },
-              doFinally: () => {
-                this.setState({ afterFinishingPing_isUploading: false });
-              },
-            });
+            void this.syncCompletedSurveyAsync();
           }}
           studyInfo={studyInfo}
           setUploadStatusSymbol={this.setUploadStatusSymbol}
