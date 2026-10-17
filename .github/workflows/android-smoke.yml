@@ -24,6 +24,11 @@ jobs:
           path: preview
       - name: Verify same-run artifact and exact source
         run: bash scripts/native/build-identity.sh verify preview
+      - name: Grant runner-only emulator acceleration access
+        run: |
+          if test -c /dev/kvm; then
+            sudo setfacl -m "u:$(id -un):rw" /dev/kvm
+          fi
       - name: Verify existing emulator acceleration access
         run: |
           if ! test -r /dev/kvm || ! test -w /dev/kvm; then
