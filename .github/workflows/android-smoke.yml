@@ -1,0 +1,49 @@
+name: Android emulator smoke test
+on:
+  workflow_dispatch:
+  push:
+    branches: [codex/modernize-mobile-runtime]
+    paths:
+      - '.github/workflows/android-smoke.yml'
+      - 'scripts/smoke-android.py'
+permissions:
+  contents: read
+  actions: read
+jobs:
+  launch-and-resume:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download latest native test build from this branch
+        run: |
+          WP_RUN=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/native-preview.yml/runs?branch=$GITHUB_REF_NAME&per_page=1" --jq '.workflow_runs[0].id')
+          test "$WP_RUN" != null
+          gh run watch "$WP_RUN" --exit-status --interval 30
+          gh run view "$WP_RUN" --json headSha,url > tested-build.json
+          cat tested-build.json
+          gh run download "$WP_RUN" -n Well-Ping-Local-Android -D preview
+      - name: Enable emulator acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 36
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          script: python3 scripts/smoke-android.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Android-emulator-test-evidence
+          path: |
+            tested-build.json
+            android-*.xml
+            android-reopened.png
+            android-result.json
+          retention-days: 14
