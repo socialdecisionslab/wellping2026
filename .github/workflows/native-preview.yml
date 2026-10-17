@@ -39,10 +39,12 @@ jobs:
         run: corepack yarn expo prebuild --platform android --no-install
       - name: Build standalone test APK
         working-directory: android
-        run: ./gradlew :app:assembleRelease --no-daemon --max-workers=2 -PreactNativeArchitectures=arm64-v8a,x86_64
+        run: ./gradlew :app:assembleRelease --no-daemon --max-workers=2 -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=2g" -PreactNativeArchitectures=arm64-v8a,x86_64
       - name: Check package and signature
         run: |
-          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging android/app/build/outputs/apk/release/app-release.apk | head -5
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging android/app/build/outputs/apk/release/app-release.apk > android-badging.txt
+          head -5 android-badging.txt
+          grep -F "package: name='app.wellping.local'" android-badging.txt
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify android/app/build/outputs/apk/release/app-release.apk
       - uses: actions/upload-artifact@v4
         with:

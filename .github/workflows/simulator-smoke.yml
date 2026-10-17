@@ -4,6 +4,7 @@ on:
   push:
     branches: [codex/modernize-mobile-runtime]
     paths:
+      - '.github/workflows/native-preview.yml'
       - '.github/workflows/simulator-smoke.yml'
       - 'scripts/smoke-ios.sh'
 concurrency:
