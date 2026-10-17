@@ -7,6 +7,8 @@ on:
       - '.github/workflows/native-preview.yml'
       - '.github/workflows/simulator-smoke.yml'
       - 'scripts/smoke-ios.sh'
+      - 'scripts/check-ios-screen.swift'
+      - 'scripts/simulator.entitlements'
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -51,4 +53,10 @@ jobs:
             ios-first-launch.png
             ios-reopen.png
             simulator-processes.txt
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Well-Ping-Local-Tested-iOS-Simulator
+          path: Well-Ping-Local-Tested-Simulator.zip
+          if-no-files-found: error
           retention-days: 14
