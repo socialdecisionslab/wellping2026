@@ -90,7 +90,8 @@ export default class RootScreen extends React.Component<
       if (e instanceof Error) {
         downloadErrorMessage = `**${e.name}**\n${e.message}`;
       } else {
-        downloadErrorMessage = `Unknown error: ${e}`;
+        downloadErrorMessage =
+          "Unable to load the study. Please check your connection or contact study staff.";
       }
       const errorMessage =
         `Failed to download study data! Possible network failure. ` +
@@ -197,9 +198,9 @@ export default class RootScreen extends React.Component<
   }
 
   async logoutFnAsync() {
-    this.setState({ userInfo: null, survey: undefined }, async () => {
-      await logoutAsync();
-    });
+    // Keep the active session visible if safe logout refuses pending data.
+    await logoutAsync();
+    this.setState({ userInfo: null, survey: undefined });
   }
 
   render() {

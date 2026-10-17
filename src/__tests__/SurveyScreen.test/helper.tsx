@@ -15,6 +15,7 @@ import {
 import { getPingsListAsync } from "../../helpers/asyncStorage/pingsList";
 import { clearAllPingsAndAnswersAsync } from "../../helpers/cleanup";
 import { insertPingAsync, getPingsAsync } from "../../helpers/pings";
+import { secureStoreUserAsync } from "../../helpers/secureStore/user";
 import { PINGS_STUDY_INFO } from "../data/pings";
 import { mockCurrentStudyInfo } from "../helper";
 
@@ -42,6 +43,11 @@ export function getBaseProps() {
 
 export async function setUpSurveyScreenTestAsync(): Promise<Ping> {
   mockCurrentStudyInfo(STUDY_INFO);
+  await secureStoreUserAsync({
+    username: "synthetic-renderer",
+    password: "test-only",
+    loginDate: 0,
+  });
 
   // Just to make sure.
   await clearAllPingsAndAnswersAsync();
@@ -251,4 +257,4 @@ export async function testQuestionsSequenceAsync({
 }
 
 export const PART_OF_NON_CRITICAL_ERROR_STRING =
-  "[INTERNAL ERROR (Please screenshot this page";
+  "[An internal error occurred. Please contact the study staff.]";

@@ -1,63 +1,65 @@
 import {
-  AnswersList,
+  Answer,
   AnswerData,
-  YesNoAnswerData,
-  MultipleTextAnswerData,
-  ChoicesWithSingleAnswerAnswerData,
+  AnswersList,
   ChoicesWithMultipleAnswersAnswerData,
   ChoicesWithSingleAnswerAnswer,
-  Answer,
+  ChoicesWithSingleAnswerAnswerData,
   MultipleTextAnswer,
+  MultipleTextAnswerData,
   SliderAnswer,
+  YesNoAnswerData,
 } from "@wellping/study-schemas/lib/answerTypes";
 import {
-  Question,
-  ChoicesWithSingleAnswerQuestion,
-  YesNoQuestion,
-  MultipleTextQuestion,
-  QuestionsList,
-  QuestionId,
   BranchQuestion,
   BranchWithRelativeComparisonQuestion,
   ChoicesQuestion,
+  ChoicesWithSingleAnswerQuestion,
+  MultipleTextQuestion,
+  Ping,
+  Question,
+  QuestionId,
+  QuestionImageOptions,
+  QuestionsList,
   StreamName,
   StudyInfo,
-  Ping,
-  QuestionImageOptions,
   WrapperQuestion,
+  YesNoQuestion,
 } from "@wellping/study-schemas/lib/types";
 import { addDays } from "date-fns";
 import React from "react";
 import {
+  Alert,
   Button,
+  Dimensions,
+  Image,
+  Platform,
+  ScrollView,
   Text,
   View,
-  ScrollView,
-  Image,
-  Dimensions,
-  Platform,
 } from "react-native";
-
-import { _DEBUG_CONFIGS } from "../config/debug";
 import { insertAnswerAsync } from "./helpers/answers";
 import {
-  getFuturePingsQueue,
   enqueueToFuturePingQueue,
+  getFuturePingsQueue,
 } from "./helpers/asyncStorage/futurePings";
-import { storePingStateAsync } from "./helpers/asyncStorage/pingState";
-import { uploadDataAsync } from "./helpers/dataUpload";
 import {
-  getNonCriticalProblemTextForUser,
+  clearPingStateAsync,
+  storePingStateAsync,
+} from "./helpers/asyncStorage/pingState";
+import {
   getCriticalProblemTextForUser,
+  getNonCriticalProblemTextForUser,
 } from "./helpers/debug";
 import {
+  NON_USER_QUESTION_TYPES,
   QuestionType,
-  withVariable,
   replacePreviousAnswerPlaceholdersWithActualContent,
   treatPlaceholderReplacementValue,
-  NON_USER_QUESTION_TYPES,
+  withVariable,
 } from "./helpers/helpers";
 import { addEndTimeToPingAsync } from "./helpers/pings";
+import { secureGetPingAsync } from "./helpers/secureStore/ping";
 import { DataValidationFunction, QuestionScreenProps } from "./helpers/types";
 import ChoicesQuestionScreen from "./questionScreens/ChoicesQuestionScreen";
 import HowLongAgoQuestionScreen from "./questionScreens/HowLongAgoQuestion";
@@ -178,8 +180,58 @@ export default class SurveyScreen extends React.Component<
     }
   }
 
+  private savingResume = false;
+
+  private async persistResume(afterSave?: () => Promise<void> | void) {
+    this.savingResume = true;
+    try {
+      await storePingStateAsync(this.props.ping.id, {
+        ...this.state,
+        isInTransition: false,
+      });
+      this.savingResume = false;
+      if (afterSave) await afterSave();
+    } catch (_) {
+      this.savingResume = true;
+      Alert.alert(
+        "Survey not saved",
+        "We could not securely save your progress. Please retry before continuing or closing the app. Your existing saved data has not been discarded.",
+        [
+          {
+            text: "Retry",
+            onPress: () => {
+              void this.persistResume(afterSave);
+            },
+          },
+        ],
+        { cancelable: false },
+      );
+    }
+  }
+
+  private completionDelivered = false;
+
+  private async finishTerminalResume() {
+    if (
+      this.state.currentQuestionData.questionId !== null ||
+      this.completionDelivered
+    )
+      return;
+    // The terminal snapshot and ping completion are separate durable writes.
+    // Recover if the app closed between them, without changing an existing end time.
+    const savedPing = await secureGetPingAsync(this.props.ping.id);
+    if (!savedPing)
+      throw new Error("Cannot finish a survey whose ping is missing.");
+    const finishedPing = savedPing.endTime
+      ? savedPing
+      : await addEndTimeToPingAsync(savedPing.id, new Date());
+    await clearPingStateAsync(savedPing.id);
+    this.props.onFinish(finishedPing);
+    this.completionDelivered = true;
+  }
+
   componentDidMount() {
-    storePingStateAsync(this.props.ping.id, this.state);
+    void this.persistResume(() => this.finishTerminalResume());
   }
 
   /**
@@ -584,33 +636,32 @@ export default class SurveyScreen extends React.Component<
    * Goes to the next question.
    */
   onNextSelect() {
+    if (this.savingResume) return;
     // Reset this so that the new `QuestionScreen` can set it.
     this.dataValidationFunction = null;
 
     const { questions, ping } = this.props;
 
     const setStateCallback = () => {
-      storePingStateAsync(ping.id, this.state);
+      void this.persistResume(async () => {
+        const {
+          currentQuestionData: { questionId: currentQuestionid },
+        } = this.state;
 
-      const {
-        currentQuestionData: { questionId: currentQuestionid },
-      } = this.state;
+        if (
+          currentQuestionid &&
+          NON_USER_QUESTION_TYPES.includes(questions[currentQuestionid].type)
+        ) {
+          // Directly calculates and goes to next if it's a branching question as
+          // they are not actually a user question.
+          this.onNextSelect();
+        }
 
-      if (
-        currentQuestionid &&
-        NON_USER_QUESTION_TYPES.includes(questions[currentQuestionid].type)
-      ) {
-        // Directly calculates and goes to next if it's a branching question as
-        // they are not actually a user question.
-        this.onNextSelect();
-      }
-
-      if (currentQuestionid == null) {
-        // There is no more question to answer.
-        addEndTimeToPingAsync(ping.id, new Date()).then((newPing) => {
-          this.props.onFinish(newPing);
-        });
-      }
+        if (currentQuestionid == null) {
+          // There is no more question to answer.
+          await this.finishTerminalResume();
+        }
+      });
     };
 
     this.setState({ isInTransition: true });
@@ -774,8 +825,6 @@ export default class SurveyScreen extends React.Component<
         if (NON_USER_QUESTION_TYPES.includes(question.type)) {
           return <></>;
         } else {
-          console.error("Cannot find the appropriate question screen!");
-
           // TODO: better error displaying.
           return <></>;
         }
@@ -991,30 +1040,6 @@ export default class SurveyScreen extends React.Component<
             title="Next"
           />
         </View>
-        {__DEV__ && _DEBUG_CONFIGS().showCurrentStatesInSurveyScreen && (
-          <ScrollView
-            style={{
-              height: 200,
-              borderColor: "black",
-              borderWidth: 1,
-            }}
-          >
-            <Text>
-              currentQuestionData:{" "}
-              {JSON.stringify(this.state.currentQuestionData)}
-            </Text>
-            <Text style={{ marginTop: 20 }}>
-              nextQuestionsDataStack:{" "}
-              {JSON.stringify(this.state.nextQuestionsDataStack)}
-            </Text>
-            <Text style={{ marginTop: 20 }}>
-              currentQuestion: {JSON.stringify(question)}
-            </Text>
-            <Text style={{ marginTop: 20 }}>
-              Current answer: {JSON.stringify(answers)}
-            </Text>
-          </ScrollView>
-        )}
       </View>
     );
   }

@@ -131,13 +131,13 @@ export async function uploadDataAsync(
     }
   } else {
     startUploading();
-    await new Promise((r) => setTimeout(r, 1000)); // Simulate loading.
     endUploading(`No Server Set`);
-    response = {};
+    throw new Error(
+      "No upload server configured. Responses remain saved on this device.",
+    );
   }
 
   // Sucessfully uploaded.
-  console.log(`${JSON.stringify(response)}`);
 
   if (!unuploadedOnly && "pings" in data) {
     // If we have uploaded all the data, we can remove the uploaded pings from

@@ -49,7 +49,10 @@ beforeEach(async () => {
 afterEach(async () => {
   expect(global.fetch).not.toHaveBeenCalled();
   expect(Notifications.scheduleNotificationAsync).not.toHaveBeenCalled();
-  for (const [key] of (SecureStore.setItemAsync as jest.Mock).mock.calls) {
+  for (const [key] of [
+    ...(SecureStore.setItemAsync as jest.Mock).mock.calls,
+    ...(SecureStore.deleteItemAsync as jest.Mock).mock.calls,
+  ]) {
     expect(key).toMatch(/^WELLPING_LOCAL-/);
   }
   for (const key of productionKeys) {

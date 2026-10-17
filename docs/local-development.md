@@ -17,7 +17,7 @@ node .yarn/releases/yarn-3.1.1.cjs smoke:local
 
 Yarn metadata and caches stay inside ignored `.yarn/` directories by default. Use these commands instead of `npm install` or a global Expo CLI. The checked-in Yarn can also be called as `yarn` when your package-manager shim honors `packageManager` in `package.json`.
 
-`test:ci` runs the TypeScript check and Jest serially with Watchman disabled. `smoke:local` starts a temporary local server on port 19800, checks its isolated manifest, compiles iOS and Android JavaScript bundles, and shuts down that server and its child processes. It does not run an emulator or publish a build. Set `WELLPING_SMOKE_PORT` to another free port if necessary.
+`test:ci` runs the TypeScript check, Jest serially with Watchman disabled, and four synthetic security regression scripts. `smoke:local` starts a temporary local server on port 19800, checks its isolated manifest, compiles iOS and Android JavaScript bundles, and shuts down that server and its child processes. It does not run an emulator or publish a build. Set `WELLPING_SMOKE_PORT` to another free port if necessary.
 
 The schema is now a checked-in artifact built from the original locked Git commit; see [artifact provenance](../vendor/README.md). Do **not** set `YARN_CHECKSUM_BEHAVIOR=update` or disable immutable installs. `.yarnrc.yml` disables dependency lifecycle scripts: this JS workflow does not need sqlite3 compilation, native filesystem-watch builds, or install-time downloads. Native build requirements must be reviewed separately when modernizing the app.
 
@@ -67,4 +67,4 @@ CI now selects the pinned Node version, enforces the lockfile, runs the tests, a
 | Server cannot bind a port | Allow localhost binding in the development sandbox and choose a free `--port`. The smoke command uses `WELLPING_SMOKE_PORT`. |
 | Offline manifest icon/schema warning | The legacy CLI may report an unavailable cached Expo schema/icon refresh. This is separate from the app bundle; confirm the manifest entry/flags and bundle checks succeed. |
 
-Next priorities remain durable answer/navigation ordering and idempotent uploads, followed by an incremental SDK migration. Do not merge or release solely because JavaScript tests and bundling succeed.
+The security backport adds verified secure resume snapshots, recovery retry, and guarded logout; see [PR reconciliation](pr-reconciliation.md). Remaining priorities include idempotent uploads and an incremental SDK migration. Do not merge or release solely because JavaScript tests and bundling succeed.

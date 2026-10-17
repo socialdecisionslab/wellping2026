@@ -107,7 +107,8 @@ test("backend configuration rejection preserves the saved study", async () => {
   });
   const error = await parseAndStoreStudyFileAsync(replacement);
   expect(validateAndInitializeFirebaseWithConfig).toHaveBeenCalledTimes(1);
-  expect(error).toContain("Synthetic Firebase configuration failure");
+  expect(error).toBe("Study configuration is invalid. Contact the study team.");
+  expect(error).not.toContain("Synthetic Firebase configuration failure");
   expect(await getStudyFileAsync()).toEqual(savedStudy);
 });
 
@@ -121,7 +122,7 @@ test("a storage failure still clears a potentially partial replacement", async (
     .mockRejectedValueOnce(new Error("Synthetic disk failure"));
   jest.spyOn(console, "error").mockImplementation(() => {});
   expect(await parseAndStoreStudyFileAsync(rawStudy)).toContain(
-    "Synthetic disk failure",
+    "Study configuration is invalid. Contact the study team.",
   );
   expect(write).toHaveBeenCalledTimes(2);
   expect(await studyFileExistsAsync()).toBe(false);

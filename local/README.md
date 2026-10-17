@@ -1,13 +1,5 @@
-For isolated development, use `yarn start:local`; see
-[local-development.md](../docs/local-development.md). It runs `LocalApp.tsx`
-with `synthetic-study.json`, no production enrollment screen, separate storage,
-and no notification scheduling or uploads.
+# Local synthetic development
 
-The older demo below is **not fully offline**: its consent and dashboard links
-are external even though it has no upload backend.
+Use `start:local` and the [setup guide](../docs/local-development.md). This entry uses artificial data, separate storage, and no research backend.
 
-To use the older content in this folder as a study file, please use
-
-- **(for `debug/DEBUG_STUDY.json` study file)** `https://debug.local.wellping.ssnl.stanford.edu/DEBUG_STUDY.json` (defined by `WELLPING_LOCAL_DEBUG_URL` constant)
-
-**Note: due to technical restrictions, YAML files could not be loaded into the app. As such, you will only be able to use JSON files here. If you want to test a YAML file, you need to host it somewhere on the Internet. Alternatively, you can use tools such as [js-yaml CLI executable](https://github.com/nodeca/js-yaml#cli-executable) to generate a JSON file from the YAML file and put it here.**
+The files in `debug/` are historical reference fixtures. The old debug URL/login entry is disabled; these files are not the supported runner.
