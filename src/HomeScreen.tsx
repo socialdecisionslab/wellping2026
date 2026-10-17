@@ -1,8 +1,8 @@
 import {
-  Streams,
-  StreamName,
-  StudyInfo,
   Ping,
+  StreamName,
+  Streams,
+  StudyInfo,
 } from "@wellping/study-schemas/lib/types";
 import { format, getDay } from "date-fns";
 import * as Linking from "expo-linking";
@@ -15,91 +15,51 @@ import {
 } from "firebase/auth";
 import React from "react";
 import {
+  Alert,
+  AppState,
+  AppStateStatus,
   Button,
   Text,
   View,
-  ScrollView,
-  Alert,
-  Clipboard,
-  Platform,
-  TouchableWithoutFeedback,
-  TouchableOpacity,
-  AppState,
-  AppStateStatus,
 } from "react-native";
-
-import SurveyScreen, { SurveyScreenState } from "./SurveyScreen";
-import DashboardComponent, {
-  getDashboardUrlAsync,
-} from "./components/DashboardComponent";
-import HideKeyboardButtonAndWrapper from "./components/HideKeyboardButtonAndWrapper";
+import DashboardComponent from "./components/DashboardComponent";
 import { getAnswersPingIdsQuestionIdsListAsync } from "./helpers/asyncStorage/answersPingIdsQuestionIdsList";
-import {
-  dequeueFuturePingIfAny,
-  getFuturePingsQueue,
-  initFuturePingQueueAsync,
-} from "./helpers/asyncStorage/futurePings";
-import {
-  getNotificationTimesAsync,
-  clearNotificationTimesAsync,
-} from "./helpers/asyncStorage/notificationTimes";
-import {
-  getPingStateAsync,
-  clearPingStateAsync,
-} from "./helpers/asyncStorage/pingState";
+import { dequeueFuturePingIfAny } from "./helpers/asyncStorage/futurePings";
 import { getPingsListAsync } from "./helpers/asyncStorage/pingsList";
+import { getPingStateAsync } from "./helpers/asyncStorage/pingState";
 import {
   addToUnuploadedPingsListIfNeededAsync,
   getUnuploadedPingsListAsync,
   removeFromUnuploadedPingsListAsync,
 } from "./helpers/asyncStorage/unuploadedPingsList";
-import { clearAllPingsAndAnswersAsync } from "./helpers/cleanup";
+import { getUnuploadedDataAsync, uploadDataAsync } from "./helpers/dataUpload";
 import {
-  uploadDataAsync,
-  getAllDataAsync,
-  getUnuploadedDataAsync,
-} from "./helpers/dataUpload";
-import {
-  getNonCriticalProblemTextForUser,
-  JS_VERSION_NUMBER,
-  getUsefulDebugInfoAsync,
   alertWithShareButtonContainingDebugInfoAsync,
+  getNonCriticalProblemTextForUser,
   HOME_SCREEN_DEBUG_VIEW_SYMBOLS,
 } from "./helpers/debug";
 import {
-  firebaseLoginAsync,
   firebaseInitialized,
+  firebaseLoginAsync,
   getFirebaseAuth,
 } from "./helpers/firebase";
-import { getLoginSessionIDAsync } from "./helpers/loginSession";
 import {
+  clearSentNotificationsAsync,
+  getCurrentNotificationTimeAsync,
   setNotificationsAsync,
   setupNotificationsPermissionAsync,
-  getCurrentNotificationTimeAsync,
-  getIncomingNotificationTimeAsync,
-  clearSentNotificationsAsync,
-  _sendTestNotificationAsync,
 } from "./helpers/notifications";
 import {
   getLatestPingAsync,
   getTodayPingsAsync,
   insertPingAsync,
-  getNumbersOfPingsForAllStreamNamesAsync,
 } from "./helpers/pings";
 import { secureGetUserAsync } from "./helpers/secureStore/user";
-import {
-  DataUploadServerResponse,
-  getSymbolsForServerTypeUsed,
-  isUsingFirebase,
-} from "./helpers/server";
-import {
-  getAllStreamNames,
-  getStudyStartDate,
-  getStudyEndDate,
-  getStudyInfoAsync,
-} from "./helpers/studyFile";
+import { DataUploadServerResponse, isUsingFirebase } from "./helpers/server";
+import { getStudyEndDate, getStudyStartDate } from "./helpers/studyFile";
 import { styles } from "./helpers/styles";
 import LoadingScreen from "./screens/LoadingScreen";
+import SurveyScreen, { SurveyScreenState } from "./SurveyScreen";
 
 interface HomeScreenProps {
   studyInfo: StudyInfo;
@@ -129,8 +89,7 @@ interface HomeScreenState {
    */
   firebaseUser: FirebaseUser | null;
 
-  // DEBUG
-  displayDebugView: boolean;
+  resumeError: boolean;
 }
 
 export default class HomeScreen extends React.Component<
@@ -149,7 +108,7 @@ export default class HomeScreen extends React.Component<
       currentNotificationTime: null,
       currentPing: null,
       isLoading: true,
-      displayDebugView: false,
+      resumeError: false,
       storedPingStateAsync: null,
       uploadStatusSymbol: HOME_SCREEN_DEBUG_VIEW_SYMBOLS.UPLOAD.INITIAL,
       firebaseUser: null,
@@ -192,6 +151,21 @@ export default class HomeScreen extends React.Component<
 
   notificationResponseReceivedListener: Subscription | null = null;
   unregisterAuthObserver: FirebaseUnsubscribe | null = null;
+  async restorePingAsync(ping: Ping) {
+    try {
+      const storedPingStateAsync = ping.endTime
+        ? null
+        : await getPingStateAsync(ping.id);
+      this.setState({
+        storedPingStateAsync,
+        currentPing: ping,
+        resumeError: false,
+      });
+    } catch (_) {
+      this.setState({ currentPing: ping, resumeError: true });
+    }
+  }
+
   async componentDidMount() {
     const { studyInfo } = this.props;
 
@@ -225,12 +199,7 @@ export default class HomeScreen extends React.Component<
       latestPing.notificationTime.getTime() ===
         currentNotificationTime.getTime()
     ) {
-      const storedPingStateAsync = await getPingStateAsync(latestPing.id);
-      //console.warn(storedPingStateAsync);
-      this.setState({
-        storedPingStateAsync,
-        currentPing: latestPing,
-      });
+      await this.restorePingAsync(latestPing);
     }
 
     if (isUsingFirebase(studyInfo) && firebaseInitialized()) {
@@ -270,7 +239,7 @@ export default class HomeScreen extends React.Component<
                 `Firebase login failed!\nNo data will be uploaded.\n\n` +
                   `Please make sure you are connected to the Internet and ` +
                   `then try restarting the app. If this error persists, ` +
-                  `please contact the research staff.\n\n(${e})`,
+                  `please contact the research staff.`,
                 "Warning",
               );
             }
@@ -398,7 +367,7 @@ export default class HomeScreen extends React.Component<
       .catch(async (e) => {
         // There's some error in uploading.
         // Do nothing (keep the unuploaded pings list unmodified).
-        console.warn(`Upload error! ${e}`);
+
         await doAfterErrorAsync(e);
       })
       .finally(() => {
@@ -431,32 +400,16 @@ export default class HomeScreen extends React.Component<
     this.setState({ uploadStatusSymbol: symbol });
   };
 
-  async _forceUploadAllDataAsync({
-    successTitle,
-    getSuccessMessage = (response) => JSON.stringify(response),
-    errorTitle,
-    getErrorMessage = (error) => getNonCriticalProblemTextForUser(`${error}`),
-  }: {
-    successTitle: string;
-    getSuccessMessage?: (response: DataUploadServerResponse) => string;
-    errorTitle: string;
-    getErrorMessage?: (error: any) => string;
-  }) {
-    const { studyInfo } = this.props;
+  async _forceUploadAllDataAsync() {
     try {
-      const response = await uploadDataAsync(
-        studyInfo,
-        this.setUploadStatusSymbol,
-        { unuploadedOnly: false },
-      );
-      await alertWithShareButtonContainingDebugInfoAsync(
-        getSuccessMessage(response),
-        successTitle,
-      );
-    } catch (e) {
-      await alertWithShareButtonContainingDebugInfoAsync(
-        getErrorMessage(e),
-        errorTitle,
+      await uploadDataAsync(this.props.studyInfo, this.setUploadStatusSymbol, {
+        unuploadedOnly: false,
+      });
+      Alert.alert("Data uploaded", "Your data was uploaded successfully.");
+    } catch (_) {
+      Alert.alert(
+        "Upload failed",
+        "Your data remains on this device. Please try again or contact study staff.",
       );
     }
   }
@@ -472,543 +425,50 @@ export default class HomeScreen extends React.Component<
       isLoading,
     } = this.state;
 
+    if (this.state.resumeError) {
+      return (
+        <View style={{ padding: 24 }}>
+          <Text>
+            Saved progress could not be recovered securely. Your data has not
+            been deleted. Please retry or contact study staff.
+          </Text>
+          <Button
+            title="Retry recovery"
+            onPress={() => {
+              if (this.state.currentPing)
+                void this.restorePingAsync(this.state.currentPing);
+            }}
+          />
+        </View>
+      );
+    }
+
     if (isLoading) {
       return <LoadingScreen />;
     }
 
-    const ExtraView = allowsNotifications ? (
-      <TouchableWithoutFeedback
-        onLongPress={() => {
-          if (__DEV__) {
-            this.setState({ displayDebugView: true });
-          }
-        }}
-      >
-        <View style={{ height: 20 }}>
-          <HideKeyboardButtonAndWrapper>
-            <View
-              style={{
-                flexDirection: "row",
-                justifyContent: "center",
-              }}
-            >
-              <TouchableOpacity
-                onPress={async () => {
-                  Alert.alert(
-                    "Well Ping",
-                    `Thank you for using Well Ping!`,
-                    [
-                      {
-                        text: "Send me a test notification!",
-                        onPress: async () => {
-                          await _sendTestNotificationAsync();
-                        },
-                      },
-                      {
-                        text: "What's my current data?",
-                        onPress: async () => {
-                          Alert.alert(
-                            "Data",
-                            ``,
-                            [
-                              {
-                                text: "View/Upload Data",
-                                onPress: async () => {
-                                  Alert.alert(
-                                    "View/Upload Data",
-                                    `Please select the type of data you want to view and/or upload.`,
-                                    [
-                                      {
-                                        text: "All Data",
-                                        onPress: async () => {
-                                          const allData =
-                                            await getAllDataAsync();
-                                          await alertWithShareButtonContainingDebugInfoAsync(
-                                            JSON.stringify(allData),
-                                            "All Data",
-                                            [
-                                              {
-                                                text: "Force Upload ALL Current Data",
-                                                onPress: async () => {
-                                                  await this._forceUploadAllDataAsync(
-                                                    {
-                                                      successTitle:
-                                                        "Data Uploaded Successfully!",
-                                                      errorTitle:
-                                                        "Error: Data Upload Error!",
-                                                    },
-                                                  );
-                                                },
-                                              },
-                                            ],
-                                          );
-                                        },
-                                      },
-                                      {
-                                        text: "Unuploaded Data",
-                                        onPress: async () => {
-                                          const unuploadedData =
-                                            await getUnuploadedDataAsync();
-                                          await alertWithShareButtonContainingDebugInfoAsync(
-                                            JSON.stringify(unuploadedData),
-                                            "Unuploaded Data",
-                                            [
-                                              {
-                                                text: "Upload Unuploaded Data",
-                                                onPress: async () => {
-                                                  await this._uploadUnuploadedDataAndRemoveFromThemIfSuccessfulAsync(
-                                                    {
-                                                      doAfterResponseAsync:
-                                                        async (response) => {
-                                                          await alertWithShareButtonContainingDebugInfoAsync(
-                                                            `Response: ${JSON.stringify(
-                                                              response,
-                                                            )}`,
-                                                            "Data Uploaded Successfully!",
-                                                          );
-                                                        },
-                                                      doAfterErrorAsync: async (
-                                                        error,
-                                                      ) => {
-                                                        await alertWithShareButtonContainingDebugInfoAsync(
-                                                          getNonCriticalProblemTextForUser(
-                                                            `Error: ${error}`,
-                                                          ),
-                                                          "Error: Data Upload Error!",
-                                                        );
-                                                      },
-                                                    },
-                                                  );
-                                                },
-                                              },
-                                            ],
-                                          );
-                                        },
-                                      },
-                                      {
-                                        text: "Cancel",
-                                        onPress: () => {},
-                                        style: "cancel",
-                                      },
-                                    ],
-                                    { cancelable: true, onDismiss: () => {} },
-                                  );
-                                },
-                              },
-                              {
-                                text: "Validate Data",
-                                onPress: async () => {
-                                  Alert.alert("TODO", "", [
-                                    {
-                                      text: "Cancel",
-                                      onPress: () => {},
-                                      style: "cancel",
-                                    },
-                                  ]);
-                                },
-                              },
-                              {
-                                text: "Cancel",
-                                onPress: () => {},
-                                style: "cancel",
-                              },
-                            ],
-                            { cancelable: true, onDismiss: () => {} },
-                          );
-                        },
-                      },
-                      {
-                        text: "OK",
-                        onPress: () => {},
-                        style: "cancel",
-                      },
-                    ],
-                    { cancelable: true, onDismiss: () => {} },
-                  );
-                }}
-              >
-                {this.state.uploadStatusSymbol.length > 1 ? (
-                  // If it is not a one-character symbol, there is an error.
-                  // We will hide the version code to show the error code.
-                  <Text style={{ color: "orange" }}>
-                    {this.state.uploadStatusSymbol}
-                  </Text>
-                ) : (
-                  <Text style={{ color: "lightgray" }}>
-                    {JS_VERSION_NUMBER}
-                    {getSymbolsForServerTypeUsed(studyInfo)}
-                    {isUsingFirebase(studyInfo) && firebaseUser === null
-                      ? HOME_SCREEN_DEBUG_VIEW_SYMBOLS.FIREBASE_AUTH
-                          .NOT_LOGGED_IN
-                      : HOME_SCREEN_DEBUG_VIEW_SYMBOLS.FIREBASE_AUTH.LOGGED_IN}
-                    {studyInfo.version && `(${studyInfo.version})`}
-                    {this.state.uploadStatusSymbol}
-                  </Text>
-                )}
-              </TouchableOpacity>
-              {studyInfo.contactEmail && (
-                <TouchableOpacity
-                  onPress={async () => {
-                    let user = await secureGetUserAsync();
-                    if (user === null) {
-                      user = {
-                        username: "UNKNOWN ERROR CANNOT GET USER",
-                        password: "N/A",
-                        loginDate: -1,
-                      };
-                    }
-
-                    const emailSubject = encodeURIComponent(
-                      `Questions about Well Ping study ${studyInfo.id}`,
-                    );
-                    const emailBody = encodeURIComponent(
-                      `Please enter your question here (please attach a screenshot if applicable):\n\n\n\n\n\n` +
-                        `====\n` +
-                        `User ID: ${user.username}\n` +
-                        `User Login Session ID: ${await getLoginSessionIDAsync(
-                          user,
-                        )}\n` +
-                        (await getUsefulDebugInfoAsync()),
-                    );
-                    const mailtoLink = `mailto:${studyInfo.contactEmail}?subject=${emailSubject}&body=${emailBody}`;
-                    Linking.openURL(mailtoLink);
-                  }}
-                >
-                  <Text style={{ color: "lightblue", marginLeft: 20 }}>
-                    Contact Staff
-                  </Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          </HideKeyboardButtonAndWrapper>
-        </View>
-      </TouchableWithoutFeedback>
-    ) : (
+    // Diagnostics and data-export controls are intentionally absent from the app.
+    const ExtraView = (
       <View>
-        <Text style={{ color: "red", fontWeight: "bold" }}>
-          If you'd like to receive reminders and updates on your participation,
-          please allow Well Ping to send you notifications.
-        </Text>
+        {!allowsNotifications && (
+          <Text>
+            Please allow notifications if you would like study reminders.
+          </Text>
+        )}
+        {studyInfo.contactEmail && (
+          <Button
+            title="Contact study staff"
+            onPress={() => {
+              void Linking.openURL(
+                `mailto:${encodeURIComponent(studyInfo.contactEmail!)}`,
+              );
+            }}
+          />
+        )}
       </View>
     );
 
-    const DebugView: React.FunctionComponent = ({ children }) => {
-      if (!this.state.displayDebugView) {
-        return <></>;
-      }
-      return (
-        <ScrollView
-          style={{
-            backgroundColor: "yellow",
-            maxHeight: 140,
-          }}
-          contentContainerStyle={{
-            padding: 5,
-          }}
-        >
-          <Text>
-            Time: {format(this.state.time, "yyyy-MM-dd'T'HH:mm:ss.SSSxxx")}
-          </Text>
-          <Text>
-            Current ping's notification time:{" "}
-            {this.state.currentNotificationTime
-              ? format(
-                  this.state.currentNotificationTime,
-                  "yyyy-MM-dd'T'HH:mm:ss.SSSxxx",
-                )
-              : "IS NULL"}
-          </Text>
-          <Text>
-            this.state.currentPing: {JSON.stringify(this.state.currentPing)}
-          </Text>
-          <Text>
-            this.state.firebaseUser: {JSON.stringify(this.state.firebaseUser)}
-          </Text>
-          <Button
-            color="green"
-            title="hide debug view"
-            onPress={() => {
-              this.setState({ displayDebugView: false });
-            }}
-          />
-          <Button
-            color="orange"
-            title="getStudyInfoAsync()"
-            onPress={async () => {
-              await alertWithShareButtonContainingDebugInfoAsync(
-                JSON.stringify(await getStudyInfoAsync()),
-              );
-            }}
-          />
-          <Button
-            color="orange"
-            title="getStudyStartDate()"
-            onPress={async () => {
-              await alertWithShareButtonContainingDebugInfoAsync(
-                getStudyStartDate(await getStudyInfoAsync()).toString(),
-              );
-            }}
-          />
-          <Button
-            color="orange"
-            title="getStudyEndDate()"
-            onPress={async () => {
-              await alertWithShareButtonContainingDebugInfoAsync(
-                getStudyEndDate(await getStudyInfoAsync()).toString(),
-              );
-            }}
-          />
-          <Button
-            color="orange"
-            title="getIncomingNotificationTimeAsync()"
-            onPress={async () => {
-              const nextPingTime = await getIncomingNotificationTimeAsync();
-              await alertWithShareButtonContainingDebugInfoAsync(
-                nextPingTime
-                  ? format(nextPingTime, "yyyy-MM-dd' T 'HH:mm:ss.SSSxxx")
-                  : "IS NULL",
-              );
-            }}
-          />
-          <Button
-            color="orange"
-            title="getLatestPingAsync()"
-            onPress={async () => {
-              const latestStartedPing = await getLatestPingAsync();
-              await alertWithShareButtonContainingDebugInfoAsync(
-                JSON.stringify(latestStartedPing),
-              );
-            }}
-          />
-          <Button
-            color="orange"
-            title="getCurrentNotificationTimeAsync()"
-            onPress={async () => {
-              const currentNotificationTime =
-                await getCurrentNotificationTimeAsync();
-              await alertWithShareButtonContainingDebugInfoAsync(
-                JSON.stringify(currentNotificationTime),
-              );
-            }}
-          />
-          <Button
-            color="red"
-            title="clear current ping state"
-            onPress={async () => {
-              const latestStartedPing = await getLatestPingAsync();
-              if (latestStartedPing) {
-                await clearPingStateAsync(latestStartedPing.id);
-                alert("Cleared. Please restart app");
-              } else {
-                alert("No current ping.");
-              }
-            }}
-          />
-          <Button
-            color="orange"
-            title="getNotificationTimesAsync()"
-            onPress={async () => {
-              const notificationsTimes = await getNotificationTimesAsync();
-              let text = "";
-              notificationsTimes!.forEach((element) => {
-                text +=
-                  format(
-                    element.notificationDate,
-                    "yyyy-MM-dd'T'HH:mm:ss.SSSxxx",
-                  ) +
-                  ", expire at " +
-                  format(
-                    element.expirationDate,
-                    "yyyy-MM-dd'T'HH:mm:ss.SSSxxx",
-                  ) +
-                  `\n`;
-              });
-              await alertWithShareButtonContainingDebugInfoAsync(text);
-            }}
-          />
-          <Button
-            color="orange"
-            title="getNumbersOfPingsForAllStreamNamesAsync()"
-            onPress={async () => {
-              const typesOfPingsAnswered =
-                await getNumbersOfPingsForAllStreamNamesAsync();
-              await alertWithShareButtonContainingDebugInfoAsync(
-                JSON.stringify(typesOfPingsAnswered),
-              );
-            }}
-          />
-          <Button
-            color="orange"
-            title="secureGetUserAsync()"
-            onPress={async () => {
-              const user = await secureGetUserAsync();
-              await alertWithShareButtonContainingDebugInfoAsync(
-                JSON.stringify(user),
-              );
-            }}
-          />
-          <Button
-            color="orange"
-            title="getFuturePingsQueue()"
-            onPress={async () => {
-              const futurePingsQueues = await getFuturePingsQueue();
-              await alertWithShareButtonContainingDebugInfoAsync(
-                JSON.stringify(futurePingsQueues),
-              );
-            }}
-          />
-          <Button
-            color="red"
-            title="reset/initFuturePingQueueAsync()"
-            onPress={async () => {
-              await initFuturePingQueueAsync();
-            }}
-          />
-          <Button
-            color="orange"
-            title="getAllDataAsync()"
-            onPress={async () => {
-              const allData = await getAllDataAsync();
-              await alertWithShareButtonContainingDebugInfoAsync(
-                JSON.stringify(allData),
-              );
-            }}
-          />
-          <Button
-            color="orange"
-            title="getUnuploadedDataAsync()"
-            onPress={async () => {
-              const unuploadedData = await getUnuploadedDataAsync();
-              await alertWithShareButtonContainingDebugInfoAsync(
-                JSON.stringify(unuploadedData),
-              );
-            }}
-          />
-          <Button
-            color="orange"
-            title="uploadDataAsync(all)"
-            onPress={async () => {
-              try {
-                const response = await uploadDataAsync(
-                  studyInfo,
-                  this.setUploadStatusSymbol,
-                  { unuploadedOnly: false },
-                );
-                await alertWithShareButtonContainingDebugInfoAsync(
-                  JSON.stringify(response),
-                );
-              } catch (e) {
-                await alertWithShareButtonContainingDebugInfoAsync(`${e}`);
-              }
-            }}
-          />
-          <Button
-            color="orange"
-            title="uploadDataAsync(unuploaded)"
-            onPress={async () => {
-              try {
-                const response = await uploadDataAsync(
-                  studyInfo,
-                  this.setUploadStatusSymbol,
-                  { unuploadedOnly: true },
-                );
-                await alertWithShareButtonContainingDebugInfoAsync(
-                  JSON.stringify(response),
-                );
-              } catch (e) {
-                await alertWithShareButtonContainingDebugInfoAsync(`${e}`);
-              }
-            }}
-          />
-          <Button
-            color="orange"
-            title="send a local notification"
-            onPress={async () => {
-              await _sendTestNotificationAsync();
-            }}
-          />
-          <Button
-            color="orange"
-            title="copy dashboard url"
-            onPress={async () => {
-              const url =
-                (await getDashboardUrlAsync(studyInfo, firebaseUser)) ??
-                "No dashboard URL.";
-              Clipboard.setString(url);
-              await alertWithShareButtonContainingDebugInfoAsync(url);
-            }}
-          />
-          <Button
-            color="red"
-            onPress={() => {
-              Alert.alert("Log out", "Are you sure you want to log out?", [
-                {
-                  text: "Cancel",
-                  style: "cancel",
-                },
-                {
-                  text: "Log out",
-                  style: "destructive",
-                  onPress: async () => {
-                    await this.props.logout();
-                  },
-                },
-              ]);
-            }}
-            title="Logout"
-          />
-          <Button
-            color="red"
-            onPress={() => {
-              Alert.alert(
-                "Dangerous",
-                "This will clear future notifications. Restart the app to reset future notifications.",
-                [
-                  {
-                    text: "Cancel",
-                    style: "cancel",
-                  },
-                  {
-                    text: "Confirm",
-                    style: "destructive",
-                    onPress: async () => {
-                      await clearNotificationTimesAsync();
-                    },
-                  },
-                ],
-              );
-            }}
-            title="Reset notifications (restart needed)"
-          />
-          <Button
-            color="red"
-            onPress={() => {
-              Alert.alert(
-                "Dangerous",
-                "Doing this will reset all your previous survey data both locally and on the server.",
-                [
-                  {
-                    text: "Cancel",
-                    style: "cancel",
-                  },
-                  {
-                    text: "Confirm",
-                    style: "destructive",
-                    onPress: async () => {
-                      await clearAllPingsAndAnswersAsync();
-                      alert("Done! Please restart the app.");
-                    },
-                  },
-                ],
-              );
-            }}
-            title="Reset pings/app (restart needed)"
-          />
-          {children}
-        </ScrollView>
-      );
-    };
-
+    // Display Study is no longer active?
     if (currentNotificationTime == null) {
       // We include `> endDate` and `< startDate` inside
       // `currentNotificationTime == null` so that the user can normally finish
@@ -1018,7 +478,6 @@ export default class HomeScreen extends React.Component<
         return (
           <View style={{ height: "100%" }}>
             {ExtraView}
-            <DebugView />
             <View style={{ marginHorizontal: 20 }}>
               <Text style={styles.onlyTextStyle}>
                 Thank you for your participation!
@@ -1047,18 +506,7 @@ export default class HomeScreen extends React.Component<
                       {
                         text: "Upload All Data",
                         onPress: async () => {
-                          await this._forceUploadAllDataAsync({
-                            successTitle: "Data Uploaded Successfully!",
-                            getSuccessMessage: (response) =>
-                              "Thank you for your patience. " +
-                              "Your local data has been successfully uploaded to the server.\n\n" +
-                              `Response: ${JSON.stringify(response)}`,
-                            errorTitle: "Error: Data Upload Error!",
-                            getErrorMessage: (error) =>
-                              "We cannot upload your data at this moment.\n\n" +
-                              "Please try again later or contact the research staff.\n\n" +
-                              `Error message: ${error}`,
-                          });
+                          await this._forceUploadAllDataAsync();
                         },
                       },
                       {
@@ -1081,7 +529,6 @@ export default class HomeScreen extends React.Component<
         return (
           <View style={{ height: "100%" }}>
             {ExtraView}
-            <DebugView />
             <Text style={styles.onlyTextStyle}>Welcome to Well Ping!</Text>
             <Text
               style={{
@@ -1100,7 +547,6 @@ export default class HomeScreen extends React.Component<
       return (
         <View style={{ height: "100%" }}>
           {ExtraView}
-          <DebugView />
           <Text style={styles.onlyTextStyle}>
             There is currently no active survey. You will receive a notification
             with a survey soon!
@@ -1114,24 +560,9 @@ export default class HomeScreen extends React.Component<
     }
 
     if (currentPing == null) {
-      const streamButtons = [];
-      for (const streamName of getAllStreamNames(studyInfo)) {
-        streamButtons.push(
-          <Button
-            color="orange"
-            key={streamName}
-            title={`Start "${streamName}" stream`}
-            onPress={() => {
-              this._startSurveyTypeAsync(streamName);
-            }}
-          />,
-        );
-      }
-
       return (
         <View style={{ height: "100%" }}>
           {ExtraView}
-          <DebugView>{streamButtons}</DebugView>
           <Text
             style={{ fontSize: 30, marginVertical: 20, textAlign: "center" }}
           >
@@ -1157,7 +588,6 @@ export default class HomeScreen extends React.Component<
       return (
         <View style={{ height: "100%" }}>
           {ExtraView}
-          <DebugView />
           {this.state.afterFinishingPing_isUploading ? (
             <Text style={{ ...styles.onlyTextStyle, color: "red" }}>
               Uploading…{"\n"}Please do not exit the app!
@@ -1229,18 +659,7 @@ export default class HomeScreen extends React.Component<
                           this.setState({
                             afterFinishingPing_isUploading: true,
                           });
-                          await this._forceUploadAllDataAsync({
-                            successTitle: "Data Uploaded Successfully!",
-                            getSuccessMessage: (response) =>
-                              "Thank you for your patience. " +
-                              "You may exit the app now.\n\n" +
-                              `Response: ${JSON.stringify(response)}`,
-                            errorTitle: "Error: Data Upload Error!",
-                            getErrorMessage: (error) =>
-                              "We cannot upload your data at this moment.\n\n" +
-                              "You may exit the app for now, we will alert you again of this problem next time you finished a ping.\n\n" +
-                              `Error message: ${error}`,
-                          });
+                          await this._forceUploadAllDataAsync();
                           this.setState({
                             afterFinishingPing_isUploading: false,
                           });
@@ -1254,9 +673,6 @@ export default class HomeScreen extends React.Component<
                 if (serverPingsCount != null) {
                   const localPingsCount = (await getPingsListAsync()).length;
                   if (serverPingsCount !== localPingsCount) {
-                    console.warn(
-                      `serverPingsCount (${serverPingsCount}) != localPingsCount (${localPingsCount})!`,
-                    );
                     showDataDiscrepancyAlert({
                       serverPingsCount,
                       localPingsCount,
@@ -1271,9 +687,6 @@ export default class HomeScreen extends React.Component<
                     await getAnswersPingIdsQuestionIdsListAsync()
                   ).length;
                   if (serverAnswersCount !== localAnswersCount) {
-                    console.warn(
-                      `serverAnswersCount (${serverAnswersCount}) != localAnswersCount (${localAnswersCount})!`,
-                    );
                     showDataDiscrepancyAlert({
                       serverPingsCount,
                       serverAnswersCount,
@@ -1291,7 +704,6 @@ export default class HomeScreen extends React.Component<
           studyInfo={studyInfo}
           setUploadStatusSymbol={this.setUploadStatusSymbol}
         />
-        <DebugView />
       </View>
     );
   }

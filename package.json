@@ -9,10 +9,11 @@
     "ios": "expo start --ios",
     "eject": "expo eject",
     "typecheck": "tsc --noEmit",
-    "test:ci": "yarn test --runInBand --watchman=false",
+    "test:ci": "yarn test --runInBand --watchman=false && yarn test:security",
     "start:local": "node scripts/start-local.cjs",
     "check:environment": "node scripts/check-environment.cjs",
-    "smoke:local": "node scripts/smoke-local.cjs"
+    "smoke:local": "node scripts/smoke-local.cjs",
+    "test:security": "node tests/security/secure-resume.cjs && node scripts/security/check-network-boundaries.cjs && node scripts/test-security-diagnostics.cjs && node tests/security/home-recovery.cjs"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "~1.15.0",
@@ -97,6 +98,7 @@
       "<rootDir>/src/__tests__/setupGlobalVariables.js",
       "<rootDir>/src/__tests__/setupAsyncStorage.js",
       "<rootDir>/src/__tests__/setupSecureStore.ts",
+      "<rootDir>/src/__tests__/setupCrypto.js",
       "jest-date-mock"
     ],
     "setupFilesAfterEnv": [

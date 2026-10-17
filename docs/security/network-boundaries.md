@@ -1,0 +1,15 @@
+# Network credential mitigation and remaining release gates
+
+This patch removes credential interpolation from the embedded dashboard. Templates containing password hashes, Firebase ID tokens, or login-session IDs fail closed with a safe user message. Recognizable literal credential query keys are rejected too; arbitrary pre-embedded secrets cannot be detected reliably and must never be configured. Remaining identifier placeholders are URI-encoded. Dashboard initial URLs must use HTTPS without userinfo; WebView navigation requests are limited to the initial origin, and mixed content/file access are disabled.
+
+This navigation restriction is not a subresource firewall: trusted dashboard HTML may still request other HTTPS resources. Review and control dashboard content, server CSP, and response headers before production use. Validate navigation/redirect behavior on actual Android and iOS builds. The synthetic checks do not emulate WebView.
+
+Beiwe and study download errors no longer echo request objects, native network exceptions, response bodies, or YAML/schema exceptions. Non-2xx statuses are rejected. Both paths validate HTTPS before transmitting; study downloads retain the existing URL allowlist. Requests ask fetch to reject redirects, but React Native transport may not honor the fetch redirect option consistently: native redirect behavior must be verified before release. Do not advertise a verified redirect protection on native devices yet.
+
+## Unresolved: legacy query credentials
+
+Authenticated study downloads still send the password hash and username in query parameters. Beiwe registration/upload still use the existing query credential protocol; registration also contains the existing new_password parameter. Hashes are reusable authentication material, not safe public data. HTTPS does not keep them out of server/proxy URL logs. The upstream client source (https://github.com/wellping/wellping/blob/main/src/helpers/beiwe.ts) confirms the query contract; no compatible alternative for this deployed custom backend was verified. These flows are preserved for compatibility, not declared secure.
+
+Before deployment with real participant data, coordinate and verify a server migration to credentials in an authenticated request body/header, remove sensitive URL logging at the server/proxy, and verify that redirects cannot disclose credentials. A client-only substitution of headers/body would invent a contract and break existing studies. If the backend cannot be migrated, disable those authenticated paths rather than consider this release production-ready. No production server configuration or credentials were changed by this patch.
+
+Run node scripts/security/check-network-boundaries.cjs for offline synthetic tests. It transpiles the actual TypeScript source and mocks network/native modules; it checks URL rejection, dashboard encoding, generic network errors, status handling and success compatibility. This does not replace real-device or backend integration tests.

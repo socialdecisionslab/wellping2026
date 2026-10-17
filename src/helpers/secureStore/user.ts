@@ -1,6 +1,4 @@
 import * as SecureStore from "expo-secure-store";
-
-import { _DEBUG_CONFIGS } from "../../../config/debug";
 import { logAndThrowError } from "../debug";
 import { getSSKeyAsync } from "./secureStore";
 

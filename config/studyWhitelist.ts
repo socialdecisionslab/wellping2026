@@ -3,8 +3,7 @@
  * your domain to the whitelist.
  */
 
-// Not including local file fake URLs (e.g., WELLPING_LOCAL_DEBUG_URL) as they
-// are always allowed.
+// The historical debug URL is disabled. Synthetic development uses start:local.
 export const STUDY_FILE_URL_PREFIXES_WHITELIST = [
   "https://wellping.github.io/",
   "https://stanfordsocialneurosciencelab.github.io/",

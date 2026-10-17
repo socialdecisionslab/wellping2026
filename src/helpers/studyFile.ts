@@ -10,7 +10,6 @@ import {
 import { isThisWeek } from "date-fns";
 import * as Crypto from "expo-crypto";
 
-import { _DEBUG_CONFIGS } from "../../config/debug";
 import { STUDY_FILE_URL_PREFIXES_WHITELIST } from "../../config/studyWhitelist";
 import {
   storeCurrentStudyFileAsync,
@@ -21,11 +20,11 @@ import {
 } from "./asyncStorage/studyFile";
 import { validateAndInitializeFirebaseWithConfig } from "./firebase";
 import { ignoreTimeObjectTimezone } from "./helpers";
+import { getHttpsOrigin } from "./networkSafety";
 import { isUsingFirebase } from "./server";
 
 export const WELLPING_LOCAL_DEBUG_URL =
   "https://debug.local.wellping.ssnl.stanford.edu/DEBUG_STUDY.json";
-const WELLPING_LOCAL_DEBUG_FILEPATH = "../../local/debug/DEBUG_STUDY.json";
 
 export type LocalStudyFileType = "debug";
 export function getLocalStudyFileType(
@@ -81,15 +80,12 @@ export async function downloadStudyFileAsync({
 }): Promise<string> {
   const localStudyFilePath = getLocalStudyFileType(url);
   if (localStudyFilePath !== null) {
-    await new Promise((r) => setTimeout(r, 100)); // Simulate loading.
-    let rawJsonString: string;
-    switch (localStudyFilePath) {
-      case "debug":
-        rawJsonString = JSON.stringify(require(WELLPING_LOCAL_DEBUG_FILEPATH));
-        break;
-    }
-    return rawJsonString;
+    throw new Error(
+      "The old debug study entry is disabled. Use the isolated synthetic runner.",
+    );
   }
+
+  getHttpsOrigin(url);
 
   if (
     !STUDY_FILE_URL_PREFIXES_WHITELIST.some((whitelistPrefix) =>
@@ -131,16 +127,17 @@ export async function downloadStudyFileAsync({
     response = await fetch(`${url}?${query}`, {
       method: "GET",
       cache: "no-store",
+      redirect: "error",
       headers: {
         Accept: "*/*",
         "Content-Type": "application/json",
       },
     });
   } catch (e) {
-    throw e;
+    throw new Error("Unable to download or read the study configuration.");
   }
 
-  if (response.status < 200 || response.status >= 400) {
+  if (response.status < 200 || response.status >= 300) {
     if (response.status === 403) {
       throw new Error(
         "Verification failed. Make sure you have entered the correct login code!",
@@ -152,7 +149,12 @@ export async function downloadStudyFileAsync({
     }
   }
 
-  const responseText = await response.text();
+  let responseText: string;
+  try {
+    responseText = await response.text();
+  } catch {
+    throw new Error("Unable to read the study configuration.");
+  }
 
   const contentType = response.headers.get("content-type");
   if (contentType && contentType.includes("json")) {
@@ -168,7 +170,7 @@ export async function downloadStudyFileAsync({
       const doc = yaml.safeLoad(responseText);
       return JSON.stringify(doc);
     } catch (e) {
-      throw e;
+      throw new Error("Unable to download or read the study configuration.");
     }
   }
 }
@@ -202,11 +204,7 @@ export async function parseAndStoreStudyFileAsync(
       await clearCurrentStudyFileAsync();
     }
 
-    if (e instanceof Error) {
-      return `**${e.name}**\n${e.message}`;
-    } else {
-      return `Unknown error: ${e}`;
-    }
+    return "Study configuration is invalid. Contact the study team.";
   }
 }
 

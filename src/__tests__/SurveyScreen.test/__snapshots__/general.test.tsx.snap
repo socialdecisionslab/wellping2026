@@ -1432,7 +1432,7 @@ Array [
 
 exports[`non-existent startingQuestionId 1`] = `
 <Text>
-  [CRITICAL ERROR (Please screenshot this page and send it to the study staff as soon as possible): questions["na"] === undefined]
+  [Unable to continue. Please contact the study staff.]
 </Text>
 `;
 

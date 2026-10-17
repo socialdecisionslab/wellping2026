@@ -50,7 +50,7 @@ test("non-existent startingQuestionId", async () => {
   };
   const { toJSON } = render(<SurveyScreen {...props} />);
 
-  expect(JSON.stringify(toJSON())).toContain("CRITICAL ERROR");
+  expect(JSON.stringify(toJSON())).toContain("Unable to continue. Please contact the study staff.");
 
   expect(toJSON()).toMatchSnapshot();
 
