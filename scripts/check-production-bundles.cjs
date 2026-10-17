@@ -64,7 +64,7 @@ try {
       !sources.some((name) => name.endsWith("local/LocalApp.tsx")),
       "Production graph must not substitute the synthetic entry",
     );
-    for (const dependency of ["braces", "node-forge"])
+    for (const dependency of ["braces", "node-forge", "sprintf-js", "uuid"])
       assert(
         !sources.some((name) => name.replace(/\\/g, "/").includes(`/node_modules/${dependency}/`)),
         `${platform}: ${dependency} must not enter the shipped JavaScript graph`,

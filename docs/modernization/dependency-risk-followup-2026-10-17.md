@@ -25,3 +25,14 @@ The maintainer explicitly approved the proposed development-only exception for t
 - Merging requires separate explicit authorization. Participant deployment requires a separate security assessment and approval.
 
 Monitor compatible upstream patches and dependency removal options; do not fork cryptographic verification or force an incompatible toolchain change merely to clear the audit. This exception does not extend to additional findings or broader tooling exposure.
+
+## Autonomous candidate recheck
+
+On October 17, 2026, `corepack yarn npm audit --all --recursive --json` was rerun at `bf4734e6373167348806a3cd40d3702f1340966b`. It exited 1 and reported the same nine package entries: two high advisories, two moderate advisories and five deprecations. The package manifest and lockfile remain unchanged. This is not a clean audit.
+
+The existing moderate advisories also require follow-up; the approval above does not accept them:
+
+- `sprintf-js` 1.0.3 via `argparse` 1.0.10: [unbounded precision denial of service](https://github.com/advisories/GHSA-hp3w-g68c-fv3c). Inspected argparse uses format templates for usage/help/error text. The js-yaml CLI supplies fixed help strings; application study loading uses js-yaml's `safeLoad`, not its CLI. No app use of arbitrary sprintf templates was found. Registry latest sprintf-js is 1.1.3, still within the reported affected range. Replacing the YAML parser solely to remove CLI tooling could change accepted research configurations and needs compatibility evidence.
+- `uuid` 7.0.3 via `xcode` 3.0.1: [buffer bounds validation](https://github.com/advisories/GHSA-w5hq-g745-h8pq), affecting specified UUID APIs with caller-provided buffers. The inspected xcode library has one UUID call: `uuid.v4()` without a supplied buffer, unlike the advisory's described use. Application persistence uses the separate `react-native-uuid` package. Registry latest xcode remains 3.0.1 with uuid `^7.0.3`; uuid latest is 14.0.3, so overriding across major versions is not an independently compatible remediation.
+
+The production module guard now checks braces, node-forge, sprintf-js and uuid. This is a build-time exposure safeguard, not a dependency fix. Its absence claim applies only after a passing graph check and only to those JavaScript graphs, not native artifacts or every tool invocation. Human integration review should consider the full audit, not merely the two approved high findings. No additional risk exception is granted by these code-path observations.
