@@ -11,11 +11,12 @@ import {
   ExtraData,
 } from "@wellping/study-schemas/lib/types";
 
+import { LOCAL_STORAGE_PREFIX } from "../../../config/local";
 import { logAndThrowError } from "../debug";
 
-const STUDY_INFO_KEY = `currentStudyFile_StudyInfo`;
-const STREAMS_KEY = `currentStudyFile_Streams`;
-const EXTRA_DATA_KEY = `currentStudyFile_ExtraData`;
+const STUDY_INFO_KEY = `${LOCAL_STORAGE_PREFIX}currentStudyFile_StudyInfo`;
+const STREAMS_KEY = `${LOCAL_STORAGE_PREFIX}currentStudyFile_Streams`;
+const EXTRA_DATA_KEY = `${LOCAL_STORAGE_PREFIX}currentStudyFile_ExtraData`;
 
 export async function storeCurrentStudyFileAsync(studyFile: StudyFile) {
   try {
