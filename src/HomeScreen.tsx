@@ -18,9 +18,11 @@ import {
   AppState,
   AppStateStatus,
   Button,
+  ScrollView,
   Text,
   View,
 } from "react-native";
+import SyncStatus from "./components/SyncStatus";
 import DashboardComponent from "./components/DashboardComponent";
 import { getAnswersPingIdsQuestionIdsListAsync } from "./helpers/asyncStorage/answersPingIdsQuestionIdsList";
 import {
@@ -63,7 +65,11 @@ import {
   insertPingAsync,
 } from "./helpers/pings";
 import { secureGetUserAsync } from "./helpers/secureStore/user";
-import { DataUploadServerResponse, isUsingFirebase } from "./helpers/server";
+import {
+  DataUploadServerResponse,
+  isUsingFirebase,
+  isUsingBeiwe,
+} from "./helpers/server";
 import { getStudyEndDate, getStudyStartDate } from "./helpers/studyFile";
 import { styles } from "./helpers/styles";
 import LoadingScreen from "./screens/LoadingScreen";
@@ -488,6 +494,7 @@ export default class HomeScreen extends React.Component<
         await doAfterResponseAsync(response);
       })
       .catch(async (e) => {
+        this.setUploadStatusSymbol("Retry sync");
         // There's some error in uploading.
         // Do nothing (keep the unuploaded pings list unmodified).
 
@@ -630,6 +637,24 @@ export default class HomeScreen extends React.Component<
     // Diagnostics and data-export controls are intentionally absent from the app.
     const ExtraView = (
       <View>
+        {(!currentPing || currentPing.endTime) && (
+          <SyncStatus
+            configured={
+              !!studyInfo.server &&
+              (isUsingFirebase(studyInfo) || isUsingBeiwe(studyInfo))
+            }
+            uploading={
+              this.state.afterFinishingPing_isUploading ||
+              this.state.uploadStatusSymbol ===
+                HOME_SCREEN_DEBUG_VIEW_SYMBOLS.UPLOAD.UPLOADING
+            }
+            failed={this.state.uploadStatusSymbol === "Retry sync"}
+            refreshToken={`${currentPing?.id ?? ""}:${
+              this.state.uploadStatusSymbol
+            }`}
+            retry={() => this.syncCompletedSurveyAsync()}
+          />
+        )}
         {this.state.expiredIncomplete && (
           <Text accessibilityRole="alert">
             An earlier survey window ended before completion. Its saved
@@ -663,7 +688,10 @@ export default class HomeScreen extends React.Component<
 
       if (new Date() > getStudyEndDate(studyInfo)) {
         return (
-          <View style={{ height: "100%" }}>
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={{ flexGrow: 1, paddingBottom: 24 }}
+          >
             {ExtraView}
             <View style={{ marginHorizontal: 20 }}>
               <Text style={styles.onlyTextStyle}>
@@ -677,44 +705,21 @@ export default class HomeScreen extends React.Component<
               >
                 The study has concluded on{"\n"}
                 {format(getStudyEndDate(studyInfo), "PPPP")}.{"\n\n"}
-                If you have any concerns regarding your ping records (or
-                payments), please do not uninstall the app and press the button
-                below to upload all your pings data stored locally. Otherwise,
-                you may now uninstall Well Ping from your phone.
+                Please check the saved responses and sync status above. Keep the
+                app installed until your study team confirms that it is safe to
+                remove it. Contact them about records or payments.
               </Text>
-              <Button
-                title="Upload Your Data"
-                onPress={async () => {
-                  Alert.alert(
-                    "Upload All Data",
-                    "During upload, your phone might be unresponsive for several minutes.\n\n" +
-                      "Please do not exit the app until you see a message telling you that the upload is complete.",
-                    [
-                      {
-                        text: "Upload All Data",
-                        onPress: async () => {
-                          await this._forceUploadAllDataAsync();
-                        },
-                      },
-                      {
-                        text: "Cancel",
-                        style: "cancel",
-                        onPress: async () => {
-                          // Do nothing
-                        },
-                      },
-                    ],
-                  );
-                }}
-              />
             </View>
-          </View>
+          </ScrollView>
         );
       }
 
       if (new Date() < getStudyStartDate(studyInfo)) {
         return (
-          <View style={{ height: "100%" }}>
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={{ flexGrow: 1, paddingBottom: 24 }}
+          >
             {ExtraView}
             <Text style={styles.onlyTextStyle}>Welcome to Well Ping!</Text>
             <Text
@@ -727,28 +732,34 @@ export default class HomeScreen extends React.Component<
               You will receive your first ping on{"\n"}
               {format(getStudyStartDate(studyInfo), "PPPP")}.
             </Text>
-          </View>
+          </ScrollView>
         );
       }
 
       return (
-        <View style={{ height: "100%" }}>
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ flexGrow: 1, paddingBottom: 24 }}
+        >
           {ExtraView}
           <Text style={styles.onlyTextStyle}>
-            There is currently no active survey. You will receive a notification
-            with a survey soon!
+            There is currently no active survey. Check your study schedule and
+            follow your study team’s instructions for the next survey.
           </Text>
           <DashboardComponent
             firebaseUser={firebaseUser}
             studyInfo={studyInfo}
           />
-        </View>
+        </ScrollView>
       );
     }
 
     if (currentPing == null) {
       return (
-        <View style={{ height: "100%" }}>
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ flexGrow: 1, paddingBottom: 24 }}
+        >
           {ExtraView}
           <Text
             style={{ fontSize: 30, marginVertical: 20, textAlign: "center" }}
@@ -767,36 +778,27 @@ export default class HomeScreen extends React.Component<
             firebaseUser={firebaseUser}
             studyInfo={studyInfo}
           />
-        </View>
+        </ScrollView>
       );
     }
 
     if (currentPing.endTime) {
       return (
-        <View style={{ height: "100%" }}>
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ flexGrow: 1, paddingBottom: 24 }}
+        >
           {ExtraView}
           <Text style={styles.onlyTextStyle}>
             Thank you for completing the survey for this ping!{"\n"}
             Your responses are saved on this device. You can close the app
             safely.
           </Text>
-          <Text accessibilityLiveRegion="polite">
-            {this.state.afterFinishingPing_isUploading
-              ? "Sync is in progress. Saved responses remain available offline."
-              : "Open the app with a connection to retry any pending sync."}
-          </Text>
-          <Button
-            title="Retry sync"
-            disabled={this.state.afterFinishingPing_isUploading}
-            onPress={() => {
-              void this.syncCompletedSurveyAsync();
-            }}
-          />
           <DashboardComponent
             firebaseUser={firebaseUser}
             studyInfo={studyInfo}
           />
-        </View>
+        </ScrollView>
       );
     }
 

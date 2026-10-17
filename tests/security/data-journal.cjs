@@ -363,11 +363,21 @@ async function mutationMatrix(name, seed, operation, verify) {
     1,
     "old upload cannot clear newer answers",
   );
+  assert.deepEqual(
+    plainCopy(await concurrent.journal.getJournalSyncSummaryAsync()),
+    { total: 1, pending: 1 },
+    "participant status must report newer unsent revision",
+  );
   const fresh = await snapshot(concurrent);
   await concurrent.journal.acknowledgeDataSnapshotAsync(fresh);
   assert.equal(
     (await concurrent.journal.getJournalPingIdsAsync(true)).length,
     0,
+  );
+  assert.deepEqual(
+    plainCopy(await concurrent.journal.getJournalSyncSummaryAsync()),
+    { total: 1, pending: 0 },
+    "only durable acknowledgement clears pending status",
   );
   await concurrent.journal.storeJournalAnswerAsync(
     answer("mood1", "fourth", "q4"),

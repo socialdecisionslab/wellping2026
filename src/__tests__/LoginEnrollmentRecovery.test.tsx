@@ -23,7 +23,19 @@ jest.mock("../helpers/failedEnrollment", () => ({
 jest.mock("../helpers/studyFile", () => ({ getStudyFileAsync: jest.fn() }));
 jest.mock("expo-linking", () => ({
   parseInitialURLAsync: jest.fn().mockResolvedValue({}),
+  parse: (...args: unknown[]) =>
+    jest
+      .requireActual("../../node_modules/expo-linking/src/createURL.ts")
+      .parse(...args),
   addEventListener: jest.fn(() => ({ remove: jest.fn() })),
+}));
+jest.mock("expo-constants", () => ({
+  __esModule: true,
+  default: {
+    expoConfig: { hostUri: "localhost", scheme: "wellping" },
+    executionEnvironment: "bare",
+  },
+  ExecutionEnvironment: { Bare: "bare", Standalone: "standalone" },
 }));
 jest.mock("expo-web-browser", () => ({ openBrowserAsync: jest.fn() }));
 
@@ -126,4 +138,50 @@ test("successful authentication completes the receipt before displaying success"
     { cancelable: false },
   );
   expect(logoutAsync).not.toHaveBeenCalled();
+});
+
+test.each(["%not-valid", "%25not-valid"])(
+  "malformed encoded login link %s gives private, recoverable guidance",
+  async (code) => {
+    const ref = React.createRef<LoginScreen>();
+    render(
+      <LoginScreen
+        ref={ref}
+        downloadAndParseStudyFileAsync={jest.fn()}
+        loggedInAsync={jest.fn()}
+      />,
+    );
+    await act(async () => {
+      ref.current!.listenToUrlWhenForegroundHandler({
+        url: `https://wellping.github.io/app/login?code=${code}`,
+      });
+    });
+    expect(screen.getByText(/This login link is invalid/)).toBeTruthy();
+    expect(
+      screen.getByLabelText("Private study login code").props.editable,
+    ).toBe(true);
+    expect(screen.getByRole("button", { name: "Log In" })).toBeEnabled();
+    expect(loginAsync).not.toHaveBeenCalled();
+  },
+);
+
+test("already-decoded private code is not decoded a third time", async () => {
+  const ref = React.createRef<LoginScreen>();
+  render(
+    <LoginScreen
+      ref={ref}
+      downloadAndParseStudyFileAsync={jest.fn()}
+      loggedInAsync={jest.fn()}
+    />,
+  );
+  await act(async () => {
+    ref.current!.listenToUrlWhenForegroundHandler({
+      url: "https://wellping.github.io/app/login?code=synthetic-%2525value",
+    });
+  });
+  expect(screen.getByLabelText("Private study login code").props.value).toBe(
+    "synthetic-%value",
+  );
+  expect(screen.queryByText(/This login link is invalid/)).toBeNull();
+  expect(loginAsync).not.toHaveBeenCalled();
 });

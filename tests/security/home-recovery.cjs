@@ -56,6 +56,11 @@ function load(file) {
       HOME_SCREEN_DEBUG_VIEW_SYMBOLS: { UPLOAD: { INITIAL: "" } },
     },
     "./helpers/styles": { styles: {} },
+    "date-fns": { format: () => "synthetic date" },
+    "./helpers/studyFile": {
+      getStudyEndDate: () => new Date("2000-01-02"),
+      getStudyStartDate: () => new Date("2000-01-01"),
+    },
     "./helpers/surveyAnswerWrites": {
       waitForPendingSurveySavesAsync: () => drain(),
     },
@@ -100,6 +105,16 @@ function load(file) {
   await home.restorePingAsync({ id: "finished", endTime: new Date() });
   assert.equal(resumeReads, 0, "completed ping does not read deleted resume");
   assert(JSON.stringify(home.render()).includes("Thank you for completing"));
+  home.setState({ currentNotificationTime: null });
+  const endedView = home.render();
+  const endedText = JSON.stringify(endedView);
+  assert(!endedText.includes("you may now uninstall"));
+  assert(endedText.includes("Keep the"));
+  assert(
+    endedText.includes("refreshToken"),
+    "sync control remains available after study end",
+  );
+  home.setState({ currentNotificationTime: new Date() });
   await home.restorePingAsync({ id: "incomplete", endTime: null });
   assert(home.state.resumeError);
   const view = home.render();

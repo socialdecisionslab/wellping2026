@@ -33,3 +33,5 @@ jobs:
         run: corepack yarn test:ci
       - name: Compile isolated iOS and Android bundles
         run: corepack yarn smoke:local
+      - name: Compile production participant UI without launching or backend access
+        run: node scripts/check-production-bundles.cjs

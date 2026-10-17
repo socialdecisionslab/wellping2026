@@ -66,32 +66,36 @@ export default class LoginScreen extends React.Component<
   }
 
   handleUrl(url: Linking.ParsedURL) {
-    if (
-      url.hostname === "stanfordsocialneurosciencelab.github.io" ||
-      url.hostname === "wellping.github.io"
-    ) {
-      if (
-        (url.path === "WellPing/app/login" || url.path === "app/login") &&
-        url.queryParams &&
-        url.queryParams["code"]
-      ) {
-        const code = url.queryParams["code"];
-        if (typeof code !== "string") return;
-        const loginCode = decodeURIComponent(code);
-
-        this.setState({ formData: loginCode });
-        Alert.alert(
-          "Hi there!",
-          `We have pre-filled your login information. Please click "OK" to log in.`,
-          [
-            {
-              text: "OK",
-              style: "cancel",
-              onPress: this.loginFnAsync,
-            },
-          ],
-        );
+    const isLoginLocation = (hostname: string | null, path: string | null) =>
+      (hostname === "stanfordsocialneurosciencelab.github.io" ||
+        hostname === "wellping.github.io") &&
+      (path === "WellPing/app/login" || path === "app/login");
+    // Expo returns the raw URL as path when query decoding fails. Recognize
+    // only our login locations, never display/log the private query string.
+    if (!url.hostname && url.path) {
+      try {
+        const raw = new URL(url.path);
+        if (isLoginLocation(raw.hostname, raw.pathname.replace(/^\//, ""))) {
+          this.setState({
+            errorText:
+              "This login link is invalid. Paste the code from your study team or contact them for a replacement.",
+          });
+        }
+      } catch (_) {
+        /* Unrelated or unrecognized link. */
       }
+      return;
+    }
+    if (isLoginLocation(url.hostname, url.path)) {
+      const code = url.queryParams?.["code"];
+      if (typeof code !== "string" || !code) return;
+      // Expo has already decoded query values. Do not decode credentials again.
+      this.setState({ formData: code, errorText: null });
+      Alert.alert(
+        "Hi there!",
+        `We have pre-filled your login information. Please click "OK" to log in.`,
+        [{ text: "OK", style: "cancel", onPress: this.loginFnAsync }],
+      );
     }
   }
 
@@ -301,10 +305,19 @@ export default class LoginScreen extends React.Component<
             Welcome to Well Ping!
           </Text>
           <Text style={{ fontSize: 20 }}>
-            Please log in using the login code sent to you.
+            Use the private login code sent by your study team. Do not share
+            this code.
           </Text>
         </View>
+        <Text style={{ marginBottom: 16 }}>
+          After setup, survey responses can be saved on this device while
+          offline. Check the sync status before removing the app. Notifications
+          are reminders; follow your study team’s instructions about when to
+          respond.
+        </Text>
         <TextInput
+          accessibilityLabel="Private study login code"
+          accessibilityHint="Paste the code provided by your study team."
           onChangeText={(text) => this.setState({ formData: text })}
           value={this.state.formData}
           autoCorrect={false}
@@ -339,12 +352,14 @@ export default class LoginScreen extends React.Component<
               borderWidth: 1,
             }}
           >
-            <Text style={{ fontWeight: "bold" }}>
+            <Text accessibilityRole="alert" style={{ fontWeight: "bold" }}>
               {`A problem occurred! Please review the error log below. ` +
                 `If necessary, please press the "Share Error" button at the ` +
                 `bottom and send the error log to the research staff.`}
             </Text>
-            <Text style={{ marginTop: 20 }}>{errorText}</Text>
+            <Text accessibilityLiveRegion="polite" style={{ marginTop: 20 }}>
+              {errorText}
+            </Text>
             <Button
               onPress={async () => {
                 await shareDebugTextAsync(errorText);
@@ -356,6 +371,7 @@ export default class LoginScreen extends React.Component<
         {loadingText && !errorText ? (
           <View style={{ marginTop: 10 }}>
             <Text
+              accessibilityLiveRegion="polite"
               style={{
                 fontWeight: "bold",
                 textAlign: "center",
