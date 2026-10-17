@@ -40,23 +40,29 @@ Alternatively, click this link on your phone to automatically enter the login co
 
 ## Development
 
+Use Node **16.20.2** (see `.nvmrc`) for this legacy Expo 44 baseline. Yarn and
+Expo CLI are pinned locally; no global CLI or account login is needed.
+
 ```bash
-npm install -g expo-cli
-npm install -g eas-cli
-
-# Installation
-yarn install
-
-# Start
-yarn start
-
-# Test
-yarn test
+# If nvm is installed:
+nvm install
+nvm use
+node scripts/check-environment.cjs
+node .yarn/releases/yarn-3.1.1.cjs install --immutable
+node .yarn/releases/yarn-3.1.1.cjs test:ci
+node .yarn/releases/yarn-3.1.1.cjs smoke:local
+node .yarn/releases/yarn-3.1.1.cjs start:local
 ```
+
+The local runner uses synthetic questions and separate storage, with no login,
+notifications, or uploads. It needs an SDK-44-compatible native client to view;
+the smoke check compiles both platforms without one. Restart after code edits.
+See [local development and troubleshooting](./docs/local-development.md).
 
 ### `@wellping/study-schemas`
 
-See https://github.com/wellping/study-schemas/blob/main/README-FOR-USERS.md.
+The original locked source is packaged in `vendor/` so installation does not
+rebuild a Git dependency. See [artifact provenance](./vendor/README.md).
 
 ## Deployment
 

@@ -14,6 +14,8 @@ Learn more about [Upgrading Expo](./upgrading-expo.md).
 
 ## Next-version reliability work
 
+Start with the [reproducible synthetic development workflow](./local-development.md).
+
 See the [reliability audit and verification results](./next-version-audit.md)
 and [prioritized backlog](./next-version-backlog.md).
 

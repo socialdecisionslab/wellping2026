@@ -1,3 +1,4 @@
+import { IS_LOCAL_DEVELOPMENT } from "../../../config/local";
 import { getInstallationIDAsync } from "../debug";
 import { getStudyInfoAsync } from "../studyFile";
 
@@ -8,7 +9,8 @@ export async function getSSKeyAsync(key: string = ""): Promise<string> {
   // Note: We include an "installation ID" so that the data will NOT be accessible
   // across different installations (as SecureStore will be accessible across
   // different installations by default on iOS).
-  return `WELLPING-${await getInstallationIDAsync()}-Study_${
+  const prefix = IS_LOCAL_DEVELOPMENT ? "WELLPING_LOCAL" : "WELLPING";
+  return `${prefix}-${await getInstallationIDAsync()}-Study_${
     studyInfo.id
   }.${key}`;
 }
