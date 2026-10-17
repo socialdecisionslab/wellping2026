@@ -15,7 +15,7 @@ corepack yarn test:ci
 corepack yarn smoke:local
 ```
 
-The lockfile and vendored original study schema are checked in. Dependency lifecycle scripts remain disabled. `test:ci` type-checks the app, runs survey and storage regression tests, and runs the four security scripts. `smoke:local` compiles both mobile JavaScript bundles into a temporary directory, checks the local app identities and disabled updates, verifies production enrollment is absent, and removes the output. It does not run a phone or simulator.
+The lockfile and vendored original study schema are checked in. Dependency lifecycle scripts remain disabled. `test:ci` type-checks the app, runs survey and storage regression tests, and runs the four security scripts. `smoke:local` compiles both mobile JavaScript bundles into a temporary directory, checks the local app identities and disabled updates, verifies production enrollment is absent, and removes the output. It also starts a temporary localhost server and checks both native manifests and the reachable bundle host before shutting it down. It does not run a phone or simulator.
 
 ## Preview the existing questionnaire
 

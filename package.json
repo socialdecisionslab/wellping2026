@@ -11,7 +11,7 @@
     "test:ci": "yarn test --runInBand --watchman=false && yarn test:security",
     "start:local": "node scripts/start-local.cjs",
     "check:environment": "node scripts/check-environment.cjs",
-    "smoke:local": "node scripts/smoke-local.cjs",
+    "smoke:local": "node scripts/smoke-local.cjs && node scripts/smoke-server.cjs",
     "test:security": "node tests/security/secure-resume.cjs && node scripts/security/check-network-boundaries.cjs && node scripts/test-security-diagnostics.cjs && node tests/security/home-recovery.cjs",
     "prebuild:local": "WELLPING_LOCAL_ONLY=1 expo prebuild",
     "android:local": "WELLPING_LOCAL_ONLY=1 expo run:android",

@@ -8,7 +8,6 @@ const child = spawn(
   [
     require.resolve("expo/bin/cli"),
     "start",
-    "--offline",
     "--localhost",
     ...process.argv.slice(2),
   ],
@@ -17,6 +16,10 @@ const child = spawn(
     env: {
       ...process.env,
       WELLPING_LOCAL_ONLY: "1",
+      // Keep Metro's localhost listener consistent with its IPv4 manifest URL.
+      NODE_OPTIONS: [process.env.NODE_OPTIONS, "--dns-result-order=ipv4first"]
+        .filter(Boolean)
+        .join(" "),
       // Metro disables filesystem watchers in CI mode. This portable
       // runner needs no Watchman; restart it after editing source files.
       CI: "1",
