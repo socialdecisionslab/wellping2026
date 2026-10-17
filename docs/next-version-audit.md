@@ -1,5 +1,7 @@
 # Next-version reliability audit
 
+Follow-up: the [reproducible local workflow](./local-development.md) resolves the installation blocker recorded below with a pinned schema artifact and project-local CLI. The baseline results here remain the historical evidence from the first audit.
+
 ## Executive summary
 
 Incremental modernization is practical. Keep the TypeScript survey engine, study formats, and backend adapters; first establish a reproducible build and strengthen recovery around them. A rewrite would risk changing established response coding, branching, and timing before those contracts are adequately tested.

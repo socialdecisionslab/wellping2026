@@ -1,4 +1,12 @@
-To use the content in this folder as a study file, please use
+For isolated development, use `yarn start:local`; see
+[local-development.md](../docs/local-development.md). It runs `LocalApp.tsx`
+with `synthetic-study.json`, no production enrollment screen, separate storage,
+and no notification scheduling or uploads.
+
+The older demo below is **not fully offline**: its consent and dashboard links
+are external even though it has no upload backend.
+
+To use the older content in this folder as a study file, please use
 
 - **(for `debug/DEBUG_STUDY.json` study file)** `https://debug.local.wellping.ssnl.stanford.edu/DEBUG_STUDY.json` (defined by `WELLPING_LOCAL_DEBUG_URL` constant)
 

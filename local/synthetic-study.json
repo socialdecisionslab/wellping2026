@@ -1,0 +1,44 @@
+{
+  "studyInfo": {
+    "id": "local_synthetic_only",
+    "version": "1",
+    "studyFileURL": "https://example.invalid/local-only",
+    "consentFormUrl": "https://example.invalid/not-opened",
+    "server": {},
+    "startDate": "2020-01-01T00:00:00.000Z",
+    "endDate": "2099-01-01T00:00:00.000Z",
+    "weekStartsOn": 1,
+    "streamsStartingQuestionIds": { "synthetic": "color" },
+    "streamInCaseOfError": "synthetic",
+    "pingsFrequency": [
+      {
+        "earliestPingNotificationTime": "09:00:00",
+        "expireAfterTime": "01:00:00"
+      }
+    ],
+    "streamsOrder": ["synthetic"],
+    "streamsNotReplacedByFollowupStream": [],
+    "notificationContent": {
+      "default": { "title": "Local test", "body": "Synthetic data only" }
+    }
+  },
+  "extraData": {},
+  "streams": {
+    "synthetic": {
+      "color": {
+        "id": "color",
+        "type": "ChoicesWithSingleAnswer",
+        "question": "Local test: choose a color.",
+        "choices": ["Blue", "Green"],
+        "next": "rating"
+      },
+      "rating": {
+        "id": "rating",
+        "type": "Slider",
+        "question": "Local test: move the slider, then finish.",
+        "slider": ["Low", "High"],
+        "next": null
+      }
+    }
+  }
+}
