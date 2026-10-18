@@ -142,6 +142,67 @@ function deferred() {
   return { promise, resolve, reject };
 }
 
+async function preservationCallbackRegressions() {
+  const tick = () => new Promise(setImmediate);
+  for (const boundary of ["unmount", "restart"]) {
+    for (const fails of [false, true]) {
+      const pending = deferred();
+      let drains = 0;
+      const Home = load("src/HomeScreen.tsx", {
+        "./helpers/surveyAnswerWrites": {
+          waitForPendingSurveySavesAsync: () => {
+            drains++;
+            return drains === 1 ? pending.promise : Promise.resolve();
+          },
+        },
+      });
+      const screen = new Home({ studyInfo: {}, streams: {} });
+      screen.homeMounted = true;
+      const callbacks = [];
+      const setState = screen.setState.bind(screen);
+      let writes = 0;
+      screen.setState = (next, callback) => {
+        writes++;
+        setState(next);
+        if (callback) callbacks.push(callback);
+      };
+      let settled = false;
+      const preservation = screen.preserveExpiredSurveyAsync();
+      void preservation.then(() => { settled = true; });
+      await tick();
+      assert.equal(drains, 1, "accepted writes drain without a React completion callback");
+      assert.equal(settled, false, "preservation still awaits accepted writes");
+      let recovery;
+      if (boundary === "unmount") screen.componentWillUnmount();
+      else recovery = screen.startHomeAsync();
+      await tick();
+      assert.equal(drains, 1, "recovery cannot bypass pending preservation");
+      writes = 0;
+      if (fails) pending.reject(Error("SYNTHETIC_SECRET"));
+      else pending.resolve();
+      await tick();
+      assert.equal(settled, true, "discarded callbacks cannot strand preservation");
+      assert.equal(screen.preservingExpired, null);
+      if (boundary === "unmount") {
+        assert.equal(writes, 0, "detached completion never publishes state");
+        recovery = screen.componentDidMount();
+      }
+      await recovery;
+      await preservation;
+      assert.equal(screen.state.isLoading, false);
+      assert.equal(screen.state.startupError, false);
+      assert.equal(screen.state.expirySavePending, false);
+      assert.equal(screen.state.expirySaveError, false);
+      const recovered = JSON.stringify(screen.state);
+      for (const callback of callbacks) callback();
+      await tick();
+      assert.equal(JSON.stringify(screen.state), recovered, "late callbacks cannot change recovery");
+      screen.componentWillUnmount();
+    }
+  }
+  console.log("PASS: dropped/deferred preservation callbacks, unmount/restart and successful/failed write recovery.");
+}
+
 async function lifecycleRegressions() {
   const tick = () => new Promise(setImmediate);
   let latest = async () => null;
@@ -594,6 +655,7 @@ async function resumeRetryRegressions() {
   assert.equal(typeof intervalCallback, "function");
   eventHome.componentWillUnmount();
   assert.equal(removedSubscriptions, 6);
+  await preservationCallbackRegressions();
   await lifecycleRegressions();
   await authLifecycleRegressions();
   await resumeRetryRegressions();

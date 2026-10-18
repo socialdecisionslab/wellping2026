@@ -182,12 +182,8 @@ export default class HomeScreen extends React.Component<
   retryPendingSurveySavesAsync() {
     if (this.preservingExpired) return this.preservingExpired;
     const generation = this.homeGeneration;
-    this.preservingExpired = new Promise<void>((resolve) => {
-      this.setState(
-        { expirySavePending: true, expirySaveError: false },
-        resolve,
-      );
-    })
+    this.setState({ expirySavePending: true, expirySaveError: false });
+    this.preservingExpired = Promise.resolve()
       .then(() => waitForPendingSurveySavesAsync())
       .then(() => {
         this.assertHomeGeneration(generation);
