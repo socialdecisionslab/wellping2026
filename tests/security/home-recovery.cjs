@@ -434,6 +434,7 @@ async function resumeRetryRegressions() {
         active = false;
         time = nextTime;
         screen.refreshHomeAsync();
+        await tick();
         assert.equal(timeReads, 0, "refresh must wait for the pending resume read");
         if (outcome === "success") resumeGate.resolve(state);
         else resumeGate.reject(Error("SYNTHETIC_SECRET"));
