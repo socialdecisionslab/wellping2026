@@ -380,19 +380,22 @@ export default class HomeScreen extends React.Component<
     const currentNotificationTime = await getCurrentNotificationTimeAsync();
     this.assertHomeGeneration(generation);
     this.setState({ currentNotificationTime });
+    const latestPingActive =
+      latestPing && !latestPing.endTime
+        ? await isJournalPingActiveAsync(latestPing.id)
+        : false;
+    this.assertHomeGeneration(generation);
     if (
       latestPing &&
       currentNotificationTime &&
       latestPing.notificationTime.getTime() ===
         currentNotificationTime.getTime() &&
-      (latestPing.endTime || (await isJournalPingActiveAsync(latestPing.id)))
+      (latestPing.endTime || latestPingActive)
     ) {
       this.assertHomeGeneration(generation);
       await this.restorePingAsync(latestPing, generation);
     } else if (latestPing && !latestPing.endTime) {
-      const active = await isJournalPingActiveAsync(latestPing.id);
-      this.assertHomeGeneration(generation);
-      if (active)
+      if (latestPingActive)
         throw new Error("An unfinished survey window needs recovery.");
       this.setState({ expiredIncomplete: true });
     }

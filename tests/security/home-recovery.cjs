@@ -147,6 +147,7 @@ async function lifecycleRegressions() {
   let permission = async () => true;
   let currentTime = async () => null;
   let resume = async () => state;
+  let active = async () => true;
   let schedules = 0;
   let removals = 0;
   const callbacks = [];
@@ -168,7 +169,7 @@ async function lifecycleRegressions() {
       clearSentNotificationsAsync: async () => {},
     },
     "./helpers/pings": { getLatestPingAsync: () => latest() },
-    "./helpers/dataJournal": { isJournalPingActiveAsync: async () => true },
+    "./helpers/dataJournal": { isJournalPingActiveAsync: () => active() },
     "./helpers/asyncStorage/pingState": {
       MissingResumeStateError: class extends Error {},
       getPingStateAsync: () => resume(),
@@ -265,6 +266,22 @@ async function lifecycleRegressions() {
   await restoring;
   assert.equal(writes, 0, "late resume read cannot resurrect a survey");
   assert.equal(intervalCallback, null);
+
+  const activeGate = deferred();
+  let activeReads = 0;
+  active = () => {
+    activeReads++;
+    return activeGate.promise;
+  };
+  const checkingActive = screen.componentDidMount();
+  await tick();
+  screen.componentWillUnmount();
+  writes = 0;
+  activeGate.resolve(false);
+  await checkingActive;
+  assert.equal(activeReads, 1, "stale inactive result cannot launch a second journal read");
+  assert.equal(writes, 0);
+  active = async () => true;
 
   latest = async () => { throw Error("SYNTHETIC_SECRET"); };
   for (let attempt = 0; attempt < 2; attempt++) {
