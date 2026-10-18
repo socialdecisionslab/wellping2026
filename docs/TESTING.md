@@ -14,6 +14,8 @@ Use deterministic synthetic fixtures and clocks. Test storage failure and accoun
 
 Home lifecycle regressions execute the actual component methods with deferred promises and synthetic platform adapters. They control completion order without wall-clock sleeps: events during startup and an active read, unmount during refresh or resume, rejection of superseded startup, repeated failures/recovery, and late save/authentication completions. These are JavaScript lifecycle tests, not proof of native notification delivery or cancellation of an already-started platform operation.
 
+Resume-retry coverage includes retry-before-expiration and expiration-before-retry, successful and failed delayed reads, replaced ping identity, clearing stale recovery UI, and skipping a queued retry after its ping expires. The tests call the actual recovery button handler and share the real Home work lane; persistence remains synthetic.
+
 CI must report `test` and `native-validation` on the exact candidate SHA. Missing, skipped or blocked mandatory smoke tests are not passes. Android KVM access is narrowly scoped on a hosted runner; paid or self-hosted infrastructure needs separate approval.
 
 JavaScript graphs do not establish native compatibility. Native smoke does not establish physical-device notification delivery, production backend acknowledgements, backup restoration or real-data retention compliance. See [release checklist](RELEASE_CHECKLIST.md).

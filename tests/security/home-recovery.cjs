@@ -8,7 +8,7 @@ class Component {
     this.props = props;
   }
   setState(next, callback) {
-    Object.assign(this.state, next);
+    Object.assign(this.state, typeof next === "function" ? next(this.state) : next);
     if (callback) callback();
   }
 }
@@ -97,6 +97,7 @@ function load(file, overrides = {}) {
       },
     },
     "./helpers/dataJournal": {
+      isJournalPingActiveAsync: async () => true,
       async getVerifiedPendingLogoutAsync() {
         return null;
       },
@@ -390,6 +391,93 @@ async function authLifecycleRegressions() {
   assert.equal(unsubscribed, 2);
   console.log("PASS: stale authentication callbacks and credential-read rejection recovery.");
 }
+
+async function resumeRetryRegressions() {
+  const tick = () => new Promise(setImmediate);
+  const oldTime = new Date("2026-01-01T10:00:00Z");
+  const nextTime = new Date("2026-01-01T11:00:00Z");
+  for (const order of ["resume-first", "expiry-first"]) {
+    for (const outcome of ["success", "failure"]) {
+      const resumeGate = deferred();
+      const expiryGate = deferred();
+      let active = true, resumeReads = 0, timeReads = 0;
+      let time = oldTime;
+      const RetryHome = load("src/HomeScreen.tsx", {
+        "./helpers/asyncStorage/pingState": {
+          MissingResumeStateError: class extends Error {},
+          getPingStateAsync: () => { resumeReads++; return resumeGate.promise; },
+        },
+        "./helpers/dataJournal": { isJournalPingActiveAsync: async () => active },
+        "./helpers/notifications": {
+          getCurrentNotificationTimeAsync: () => {
+            timeReads++;
+            return order === "expiry-first" && timeReads === 1
+              ? expiryGate.promise : Promise.resolve(time);
+          },
+          clearSentNotificationsAsync: async () => {},
+        },
+      });
+      const screen = new RetryHome({ studyInfo: {}, streams: {} });
+      const ping = { id: "retained", endTime: null, notificationTime: oldTime };
+      screen.homeMounted = true;
+      screen.setState({
+        currentPing: ping, currentNotificationTime: oldTime,
+        resumeError: true, storedPingStateAsync: state, isLoading: false,
+      });
+      const retry = screen.render().children.find(
+        (child) => child?.props?.title === "Retry recovery",
+      ).props.onPress;
+      if (order === "resume-first") {
+        retry();
+        await tick();
+        assert.equal(resumeReads, 1);
+        active = false;
+        time = nextTime;
+        screen.refreshHomeAsync();
+        assert.equal(timeReads, 0, "refresh must wait for the pending resume read");
+        if (outcome === "success") resumeGate.resolve(state);
+        else resumeGate.reject(Error("SYNTHETIC_SECRET"));
+      } else {
+        screen.refreshHomeAsync();
+        await tick();
+        retry();
+        assert.equal(resumeReads, 0, "retry waits for the pending expiration check");
+        active = false;
+        time = nextTime;
+        expiryGate.resolve(nextTime);
+      }
+      await screen.homeWork;
+      assert.equal(screen.state.currentPing, null, `${order}/${outcome}: no resurrection`);
+      assert.equal(screen.state.resumeError, false, "obsolete resume error is cleared");
+      assert.equal(screen.state.storedPingStateAsync, null);
+      assert(screen.state.expiredIncomplete);
+      assert(!JSON.stringify(screen.render()).includes("Saved progress could not be recovered"));
+      assert.equal(resumeReads, order === "resume-first" ? 1 : 0);
+      screen.componentWillUnmount();
+    }
+  }
+  for (const outcome of ["success", "failure"]) {
+    const pending = deferred();
+    const RetryHome = load("src/HomeScreen.tsx", {
+      "./helpers/asyncStorage/pingState": {
+        MissingResumeStateError: class extends Error {},
+        getPingStateAsync: () => pending.promise,
+      },
+    });
+    const screen = new RetryHome({ studyInfo: {}, streams: {} });
+    const ping = { id: "old", endTime: null };
+    const replacement = { id: "replacement", endTime: null };
+    screen.setState({ currentPing: ping });
+    const restoring = screen.restorePingAsync(ping);
+    screen.setState({ currentPing: replacement, resumeError: false });
+    if (outcome === "success") pending.resolve(state);
+    else pending.reject(Error("SYNTHETIC_SECRET"));
+    await restoring;
+    assert.equal(screen.state.currentPing, replacement);
+    assert.equal(screen.state.resumeError, false);
+  }
+  console.log("PASS: resume/expiry completion orders, failed resume after expiry, superseded ping fencing and recovery-screen cleanup.");
+}
 (async () => {
   const Home = load("src/HomeScreen.tsx");
   const home = new Home({ studyInfo: {}, streams: {} });
@@ -412,6 +500,8 @@ async function authLifecycleRegressions() {
   const view = home.render();
   assert(JSON.stringify(view).includes("Your data has not been deleted"));
   resumeFails = false;
+  home.homeMounted = true;
+  home.setState({ currentNotificationTime: null });
   view.children
     .find((child) => child?.props?.title === "Retry recovery")
     .props.onPress();
@@ -505,6 +595,7 @@ async function authLifecycleRegressions() {
   assert.equal(removedSubscriptions, 6);
   await lifecycleRegressions();
   await authLifecycleRegressions();
+  await resumeRetryRegressions();
   const root = new Root({});
   root.setState({
     userInfo: { username: "synthetic" },

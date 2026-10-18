@@ -10,6 +10,8 @@ WellPing is an Expo/React Native research survey application. The current candid
 
 Home initialization and refresh share one serialized promise lane. Notification delivery, notification responses and foreground events request a trailing check when work is already running rather than being dropped. Listeners are installed before initialization reads; the periodic timer and ready state are enabled only after initialization and queued checks finish. Recovery uses an explicit start operation, not a manual call to a React lifecycle method.
 
+Resume retries also use that lane, capturing the ping being retried. Pending expiration checks run first; a retry for a cleared or replaced ping is skipped. After a resume read, existing expiration rules and journal activity are rechecked before publishing, with generation and ping-identity guards on the state update. Expiration clears obsolete resume errors and in-memory snapshots while preserving durable responses. This avoids resurrecting an expired survey or stranding the participant on a retry screen with no current ping.
+
 Each Home lifecycle has a generation. Unmount, failure or restart invalidates older callbacks and asynchronous continuations; an old completion cannot restore UI state or remove newer subscriptions. Replacement work on the same instance waits for preceding work to settle. Accepted answer writes are drained, not cancelled or discarded. Already-started native/storage/network operations cannot be physically cancelled by this guard; it prevents subsequent Home-side effects and stale publication, not cancellation inside external APIs. Cross-participant storage writes remain protected by the journal ownership boundary.
 
 ## Persistence and ownership

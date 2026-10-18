@@ -161,7 +161,11 @@ export default class HomeScreen extends React.Component<
         await this.preserveExpiredSurveyAsync();
         this.assertHomeGeneration(generation);
       } else {
-        this.setState({ currentPing: null });
+        this.setState({
+          currentPing: null,
+          storedPingStateAsync: null,
+          resumeError: false,
+        });
       }
     }
 
@@ -190,6 +194,8 @@ export default class HomeScreen extends React.Component<
         if (this.expiryTransitionRequested) {
           this.setState({
             currentPing: null,
+            storedPingStateAsync: null,
+            resumeError: false,
             expiredIncomplete: true,
             expirySavePending: false,
             expirySaveError: false,
@@ -230,46 +236,60 @@ export default class HomeScreen extends React.Component<
     null;
   unregisterAuthObserver: FirebaseUnsubscribe | null = null;
   async restorePingAsync(ping: Ping, generation = this.homeGeneration) {
+    const previousPing = this.state.currentPing;
+    const isCurrent = () =>
+      generation === this.homeGeneration &&
+      this.state.currentPing === previousPing;
+    let storedPingStateAsync: SurveyScreenState | null = null;
+    let resumeError = false;
     try {
-      const storedPingStateAsync = ping.endTime
+      storedPingStateAsync = ping.endTime
         ? null
         : await getPingStateAsync(ping.id);
-      if (generation !== this.homeGeneration) return;
-      this.setState({
-        storedPingStateAsync,
-        currentPing: ping,
-        resumeError: false,
-      });
     } catch (error) {
-      if (generation !== this.homeGeneration) return;
-      let canStartWithoutResume = false;
+      if (!isCurrent()) return;
+      resumeError = true;
       if (error instanceof MissingResumeStateError) {
         try {
-          canStartWithoutResume = (
+          resumeError = (
             await getAnswersPingIdsQuestionIdsListAsync()
-          ).every(([id]) => id !== ping.id);
+          ).some(([id]) => id === ping.id);
         } catch {
-          canStartWithoutResume = false;
+          resumeError = true;
         }
       }
-      if (canStartWithoutResume) {
-        if (generation !== this.homeGeneration) return;
-        this.setState({
-          currentPing: ping,
-          storedPingStateAsync: null,
-          resumeError: false,
-        });
+    }
+    if (!isCurrent()) return;
+    if (previousPing === ping) {
+      await this.checkIfPingHasExpiredAsync(generation);
+      if (!isCurrent()) return;
+    }
+    if (!ping.endTime) {
+      const active = await isJournalPingActiveAsync(ping.id);
+      if (!isCurrent()) return;
+      if (!active) {
+        await this.preserveExpiredSurveyAsync();
         return;
       }
-      if (generation !== this.homeGeneration) return;
-      this.setState({ currentPing: ping, resumeError: true });
     }
+    this.setState((current) =>
+      generation === this.homeGeneration && current.currentPing === previousPing
+        ? { currentPing: ping, storedPingStateAsync, resumeError }
+        : null,
+    );
   }
 
   homeGeneration = 0;
   homeMounted = false;
   homeWork: Promise<void> | null = null;
   refreshRequested = false;
+  resumeRequested: Ping | null = null;
+
+  retryResumeAsync() {
+    if (!this.homeMounted || !this.state.currentPing) return Promise.resolve();
+    this.resumeRequested = this.state.currentPing;
+    return this.homeWork || this.runHomeAsync(false);
+  }
 
   assertHomeGeneration(generation: number) {
     if (generation !== this.homeGeneration)
@@ -290,6 +310,7 @@ export default class HomeScreen extends React.Component<
   startHomeAsync() {
     if (!this.homeMounted) return Promise.resolve();
     this.homeGeneration++;
+    this.resumeRequested = null;
     this.removeHomeSubscriptions();
     this.refreshRequested = true;
     this.setState({ startupError: false, isLoading: true });
@@ -323,9 +344,19 @@ export default class HomeScreen extends React.Component<
           await this.initializeHomeAsync(generation);
           this.assertHomeGeneration(generation);
         }
-        while (this.refreshRequested) {
-          this.refreshRequested = false;
-          await this.checkIfPingHasExpiredAsync(generation);
+        while (this.refreshRequested || this.resumeRequested) {
+          if (this.refreshRequested) {
+            this.refreshRequested = false;
+            await this.checkIfPingHasExpiredAsync(generation);
+          } else {
+            const ping = this.resumeRequested;
+            this.resumeRequested = null;
+            if (ping && this.state.currentPing === ping) {
+              await this.restorePingAsync(ping, generation);
+              this.assertHomeGeneration(generation);
+              this.refreshRequested = true;
+            }
+          }
           this.assertHomeGeneration(generation);
         }
         if (initialize) {
@@ -339,6 +370,7 @@ export default class HomeScreen extends React.Component<
         if (generation !== this.homeGeneration) return;
         this.homeGeneration++;
         this.refreshRequested = false;
+        this.resumeRequested = null;
         this.removeHomeSubscriptions();
         this.setState({
           startupError: true,
@@ -350,8 +382,11 @@ export default class HomeScreen extends React.Component<
       .finally(() => {
         if (this.homeWork === work) {
           this.homeWork = null;
-          if (generation === this.homeGeneration && this.refreshRequested)
-            void this.refreshHomeAsync();
+          if (
+            generation === this.homeGeneration &&
+            (this.refreshRequested || this.resumeRequested)
+          )
+            void this.runHomeAsync(false);
         }
       });
     this.homeWork = work;
@@ -474,6 +509,7 @@ export default class HomeScreen extends React.Component<
   componentWillUnmount() {
     this.homeMounted = false;
     this.homeGeneration++;
+    this.resumeRequested = null;
     this.refreshRequested = false;
     this.removeHomeSubscriptions();
   }
@@ -727,8 +763,7 @@ export default class HomeScreen extends React.Component<
           <Button
             title="Retry recovery"
             onPress={() => {
-              if (this.state.currentPing)
-                void this.restorePingAsync(this.state.currentPing);
+              void this.retryResumeAsync();
             }}
           />
         </View>
