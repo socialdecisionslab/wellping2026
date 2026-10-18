@@ -8,6 +8,10 @@ WellPing is an Expo/React Native research survey application. The current candid
 
 `HomeScreen` initializes notification permissions and scheduling, displays synchronization status, and checks survey expiration on foreground, timer and notification events. Survey entry verifies participant ownership. `SurveyScreen` serializes answer writes and persists resume state before navigation. Completion persists the completion event and ping end time before clearing resume state.
 
+Home initialization and refresh share one serialized promise lane. Notification delivery, notification responses and foreground events request a trailing check when work is already running rather than being dropped. Listeners are installed before initialization reads; the periodic timer and ready state are enabled only after initialization and queued checks finish. Recovery uses an explicit start operation, not a manual call to a React lifecycle method.
+
+Each Home lifecycle has a generation. Unmount, failure or restart invalidates older callbacks and asynchronous continuations; an old completion cannot restore UI state or remove newer subscriptions. Replacement work on the same instance waits for preceding work to settle. Accepted answer writes are drained, not cancelled or discarded. Already-started native/storage/network operations cannot be physically cancelled by this guard; it prevents subsequent Home-side effects and stale publication, not cancellation inside external APIs. Cross-participant storage writes remain protected by the journal ownership boundary.
+
 ## Persistence and ownership
 
 The data journal is the authority for participant-owned response state. Its owner includes installation, study, username and login session. Write-ahead transactions, SecureStore chunks and manifests, and AsyncStorage metadata support recovery. Secure resume preserves interrupted work; legacy records without verified ownership are quarantined rather than assigned to the next participant.

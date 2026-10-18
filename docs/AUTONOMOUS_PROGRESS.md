@@ -24,3 +24,19 @@ Audit refreshed at `bf4734e` using `corepack yarn npm audit --all --recursive --
 PR `pull_request` CI and native workflows started on exact head `bf4734e`; push application CI also started. Native push triggers intentionally list the original integration branches, not this new working branch; the PR targets a covered base and has no changed-file exclusion. Subsequent documentation commits require fresh exact-head CI too. Do not infer their results from earlier runs.
 
 Next: inspect PR #12 exact-head CI, request independent review, and validate on physical devices/backends when available. Compatible dependency remediation, real-data governance and DST protocol intent remain unresolved. Keep #6/#8/#9/#12 draft and unmerged. No release or merge approval was granted.
+
+## PR #12 lifecycle review follow-up
+
+Starting head: `43638130a92bc7d720cf7bcb0d08523abff0bc43`; its application CI and native builds/smokes passed, but review identified missing concurrency and lifecycle cases. The GitHub discussion contained validation notes, not additional inline findings; this follow-up implements the specific concerns supplied in the conversation.
+
+- Replaced separate startup/refresh promises with one serialized lane and a pending-refresh flag. Events arriving during a read cause a trailing check; receipt and response listeners are both covered.
+- Installed listeners before initialization, delayed timer/ready state until recovery finishes, and separated subscription disposal from React unmount and explicit recovery start.
+- Fenced startup, refresh, resume, accepted-save completion and authentication callbacks by lifecycle generation. Superseded work cannot publish state, show stale errors, start a later auth request or tear down replacement subscriptions. New work on the same component waits for old work to settle.
+- Added deterministic deferred-promise regressions for initialization events, trailing checks, repeated failures/recovery, unmount, stale rejections, resume/save retention and authentication-read errors. Existing participant-data journal tests remain unchanged.
+- No dependencies, persistent state formats, study schedules, response formats or backend contracts changed. Already-started external operations are not cancellable through the Home generation guard; physical-device and backend validation remain separate gates.
+
+Validation and exact published SHA will be recorded in the PR conversation after the final automated checks. The two high dependency advisories remain under the existing limited development exception; two moderate advisories are not automatically accepted. No merge, deployment or unrelated PR modification is authorized. Review the #6 → #8 → #9 → #12 dependency chain before any future integration.
+
+Local follow-up validation passed: lint, TypeScript, 33 suites / 451 tests / 282 snapshots, all five security scripts including the expanded lifecycle cases, isolated and production Android/iOS bundles, both localhost manifests, native workflow guard (15 mutations / 17 aggregate cases), actionlint and whitespace checks. The dependency audit was refreshed and still exits 1 with the same nine entries; no suppression or dependency change was made.
+
+Second implementation review checked queue ordering, events at task completion, invalidation after each awaited lifecycle read, identity-checked task cleanup, listener disposal, repeated recovery, accepted-write draining, stale auth callbacks and fail-closed missing-resume evidence. This is an implementation self-review, not independent approval. Exact-head native CI and an independent review of this follow-up remain required; prior green CI is not evidence for the new source.

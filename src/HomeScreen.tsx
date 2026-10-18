@@ -134,10 +134,11 @@ export default class HomeScreen extends React.Component<
     };
   }
 
-  async checkIfPingHasExpiredAsync() {
+  async checkIfPingHasExpiredAsync(generation = this.homeGeneration) {
     const previousNotificationTime = this.state.currentNotificationTime;
 
     const currentNotificationTime = await getCurrentNotificationTimeAsync();
+    this.assertHomeGeneration(generation);
     this.setState({ time: new Date(), currentNotificationTime });
 
     // Because we cannot compare data directly, we have to compare the time with
@@ -151,12 +152,14 @@ export default class HomeScreen extends React.Component<
       this.state.currentPing &&
       !this.state.currentPing.endTime &&
       !(await isJournalPingActiveAsync(this.state.currentPing.id));
+    this.assertHomeGeneration(generation);
     if (
       privateWindowExpired ||
       currentNotificationTimeNumber !== previousNotificationTimeNumber
     ) {
       if (this.state.currentPing && !this.state.currentPing.endTime) {
         await this.preserveExpiredSurveyAsync();
+        this.assertHomeGeneration(generation);
       } else {
         this.setState({ currentPing: null });
       }
@@ -174,6 +177,7 @@ export default class HomeScreen extends React.Component<
 
   retryPendingSurveySavesAsync() {
     if (this.preservingExpired) return this.preservingExpired;
+    const generation = this.homeGeneration;
     this.preservingExpired = new Promise<void>((resolve) => {
       this.setState(
         { expirySavePending: true, expirySaveError: false },
@@ -182,6 +186,7 @@ export default class HomeScreen extends React.Component<
     })
       .then(() => waitForPendingSurveySavesAsync())
       .then(() => {
+        this.assertHomeGeneration(generation);
         if (this.expiryTransitionRequested) {
           this.setState({
             currentPing: null,
@@ -195,7 +200,8 @@ export default class HomeScreen extends React.Component<
         this.expiryTransitionRequested = false;
       })
       .catch(() => {
-        this.setState({ expirySavePending: false, expirySaveError: true });
+        if (generation === this.homeGeneration)
+          this.setState({ expirySavePending: false, expirySaveError: true });
       })
       .finally(() => {
         this.preservingExpired = null;
@@ -217,26 +223,37 @@ export default class HomeScreen extends React.Component<
   notificationResponseReceivedListener: ReturnType<
     typeof Notifications.addNotificationResponseReceivedListener
   > | null = null;
+  notificationReceivedListener: ReturnType<
+    typeof Notifications.addNotificationReceivedListener
+  > | null = null;
   appStateSubscription: ReturnType<typeof AppState.addEventListener> | null =
     null;
   unregisterAuthObserver: FirebaseUnsubscribe | null = null;
-  async restorePingAsync(ping: Ping) {
+  async restorePingAsync(ping: Ping, generation = this.homeGeneration) {
     try {
       const storedPingStateAsync = ping.endTime
         ? null
         : await getPingStateAsync(ping.id);
+      if (generation !== this.homeGeneration) return;
       this.setState({
         storedPingStateAsync,
         currentPing: ping,
         resumeError: false,
       });
     } catch (error) {
-      if (
-        error instanceof MissingResumeStateError &&
-        (await getAnswersPingIdsQuestionIdsListAsync()).every(
-          ([id]) => id !== ping.id,
-        )
-      ) {
+      if (generation !== this.homeGeneration) return;
+      let canStartWithoutResume = false;
+      if (error instanceof MissingResumeStateError) {
+        try {
+          canStartWithoutResume = (
+            await getAnswersPingIdsQuestionIdsListAsync()
+          ).every(([id]) => id !== ping.id);
+        } catch {
+          canStartWithoutResume = false;
+        }
+      }
+      if (canStartWithoutResume) {
+        if (generation !== this.homeGeneration) return;
         this.setState({
           currentPing: ping,
           storedPingStateAsync: null,
@@ -244,68 +261,125 @@ export default class HomeScreen extends React.Component<
         });
         return;
       }
+      if (generation !== this.homeGeneration) return;
       this.setState({ currentPing: ping, resumeError: true });
     }
   }
 
-  startup: Promise<void> | null = null;
-  refreshing: Promise<void> | null = null;
+  homeGeneration = 0;
+  homeMounted = false;
+  homeWork: Promise<void> | null = null;
+  refreshRequested = false;
+
+  assertHomeGeneration(generation: number) {
+    if (generation !== this.homeGeneration)
+      throw new Error("Home operation is no longer current.");
+  }
+
   refreshHomeAsync() {
-    if (this.refreshing) return this.refreshing;
-    this.refreshing = this.checkIfPingHasExpiredAsync()
-      .catch(() => {
-        this.componentWillUnmount();
-        this.setState({ startupError: true, isLoading: false });
-      })
-      .finally(() => {
-        this.refreshing = null;
-      });
-    return this.refreshing;
+    if (!this.homeMounted) return Promise.resolve();
+    this.refreshRequested = true;
+    return this.homeWork || this.runHomeAsync(false);
   }
 
   componentDidMount() {
-    if (this.startup) return this.startup;
-    this.startup = this.initializeHomeAsync()
-      .catch(() => {
-        this.componentWillUnmount();
-        this.setState({ startupError: true, isLoading: false });
-      })
-      .finally(() => {
-        this.startup = null;
-      });
-    return this.startup;
+    this.homeMounted = true;
+    return this.startHomeAsync();
   }
 
-  async initializeHomeAsync() {
+  startHomeAsync() {
+    if (!this.homeMounted) return Promise.resolve();
+    this.homeGeneration++;
+    this.removeHomeSubscriptions();
+    this.refreshRequested = true;
+    this.setState({ startupError: false, isLoading: true });
+    return this.runHomeAsync(true);
+  }
+
+  runHomeAsync(initialize: boolean) {
+    const generation = this.homeGeneration;
+    const previous = this.homeWork;
+    const work = Promise.resolve(previous)
+      .then(async () => {
+        this.assertHomeGeneration(generation);
+        if (initialize) {
+          this.notificationResponseReceivedListener =
+            Notifications.addNotificationResponseReceivedListener(() => {
+              if (generation === this.homeGeneration)
+                void this.refreshHomeAsync();
+            });
+          this.notificationReceivedListener =
+            Notifications.addNotificationReceivedListener(() => {
+              if (generation === this.homeGeneration)
+                void this.refreshHomeAsync();
+            });
+          this.appStateSubscription = AppState.addEventListener(
+            "change",
+            (state) => {
+              if (generation === this.homeGeneration)
+                this._handleAppStateChange(state);
+            },
+          );
+          await this.initializeHomeAsync(generation);
+          this.assertHomeGeneration(generation);
+        }
+        while (this.refreshRequested) {
+          this.refreshRequested = false;
+          await this.checkIfPingHasExpiredAsync(generation);
+          this.assertHomeGeneration(generation);
+        }
+        if (initialize) {
+          this.interval = setInterval(() => {
+            if (generation === this.homeGeneration) void this.refreshHomeAsync();
+          }, 30 * 1000);
+          this.setState({ isLoading: false });
+        }
+      })
+      .catch(() => {
+        if (generation !== this.homeGeneration) return;
+        this.homeGeneration++;
+        this.refreshRequested = false;
+        this.removeHomeSubscriptions();
+        this.setState({
+          startupError: true,
+          isLoading: false,
+          expirySavePending: false,
+          expirySaveError: false,
+        });
+      })
+      .finally(() => {
+        if (this.homeWork === work) {
+          this.homeWork = null;
+          if (generation === this.homeGeneration && this.refreshRequested)
+            void this.refreshHomeAsync();
+        }
+      });
+    this.homeWork = work;
+    return work;
+  }
+
+  async initializeHomeAsync(generation: number) {
     const { studyInfo } = this.props;
 
+    await this.preservingExpired;
+    this.assertHomeGeneration(generation);
+    await waitForPendingSurveySavesAsync();
+    this.assertHomeGeneration(generation);
+    this.expiryTransitionRequested = false;
+    this.setState({ expirySavePending: false, expirySaveError: false });
     const latestPing = await getLatestPingAsync();
+    this.assertHomeGeneration(generation);
     const allowsNotifications = await setupNotificationsPermissionAsync();
-    if (!allowsNotifications) {
-      this.setState({ allowsNotifications: false });
-    }
+    this.assertHomeGeneration(generation);
+    this.setState({ allowsNotifications });
 
     await setNotificationsAsync();
-
-    // Check if the current notification expires.
-    this.interval = setInterval(() => {
-      void this.refreshHomeAsync();
-    }, 30 * 1000);
-    // Do this initially too.
-    await this.checkIfPingHasExpiredAsync();
-
-    this.notificationResponseReceivedListener =
-      Notifications.addNotificationResponseReceivedListener(() => {
-        void this.refreshHomeAsync();
-      });
-
-    this.appStateSubscription = AppState.addEventListener(
-      "change",
-      this._handleAppStateChange,
-    );
+    this.assertHomeGeneration(generation);
 
     // Recover before presenting participant actions.
     const currentNotificationTime = await getCurrentNotificationTimeAsync();
+    this.assertHomeGeneration(generation);
+    this.setState({ currentNotificationTime });
     if (
       latestPing &&
       currentNotificationTime &&
@@ -313,17 +387,22 @@ export default class HomeScreen extends React.Component<
         currentNotificationTime.getTime() &&
       (latestPing.endTime || (await isJournalPingActiveAsync(latestPing.id)))
     ) {
-      await this.restorePingAsync(latestPing);
+      this.assertHomeGeneration(generation);
+      await this.restorePingAsync(latestPing, generation);
     } else if (latestPing && !latestPing.endTime) {
-      if (await isJournalPingActiveAsync(latestPing.id))
+      const active = await isJournalPingActiveAsync(latestPing.id);
+      this.assertHomeGeneration(generation);
+      if (active)
         throw new Error("An unfinished survey window needs recovery.");
       this.setState({ expiredIncomplete: true });
     }
+    this.assertHomeGeneration(generation);
 
     if (isUsingFirebase(studyInfo) && firebaseInitialized()) {
       this.unregisterAuthObserver = firebaseOnAuthStateChanged(
         getFirebaseAuth(),
         async (firebaseUser) => {
+          if (generation !== this.homeGeneration) return;
           if (firebaseUser) {
             // The user is signed in to Firebase.
             // Notice that Firebase Authentication sessions are long lived,
@@ -336,20 +415,22 @@ export default class HomeScreen extends React.Component<
             // The user is not signed in to Firebase.
 
             // We will try to log in the user again first.
-            const localStoredUser = await secureGetUserAsync();
-            if (localStoredUser === null) {
-              await alertWithShareButtonContainingDebugInfoAsync(
-                "Not logged in locally!",
-                "Error",
-              );
-              return;
-            }
-
             try {
+              const localStoredUser = await secureGetUserAsync();
+              if (generation !== this.homeGeneration) return;
+              if (localStoredUser === null) {
+                await alertWithShareButtonContainingDebugInfoAsync(
+                  "Not logged in locally!",
+                  "Error",
+                );
+                return;
+              }
+
               await firebaseLoginAsync(localStoredUser);
               // If the login is successful, this `onAuthStateChanged` callback
               // will be called again, so we don't have to do anything here.
             } catch (e) {
+              if (generation !== this.homeGeneration) return;
               await alertWithShareButtonContainingDebugInfoAsync(
                 // I'm pretty sure Internet has nothing to do with this, but
                 // we will still tell user to connect to the Internet just in
@@ -364,6 +445,7 @@ export default class HomeScreen extends React.Component<
           }
         },
         async (e) => {
+          if (generation !== this.homeGeneration) return;
           // Unsure when will this be called.
           await alertWithShareButtonContainingDebugInfoAsync(
             `onAuthStateChanged error: ${e}`,
@@ -371,8 +453,6 @@ export default class HomeScreen extends React.Component<
         },
       );
     }
-
-    this.setState({ isLoading: false });
 
     if (studyInfo.specialAlertOnLaunch) {
       Alert.alert(
@@ -389,6 +469,13 @@ export default class HomeScreen extends React.Component<
   }
 
   componentWillUnmount() {
+    this.homeMounted = false;
+    this.homeGeneration++;
+    this.refreshRequested = false;
+    this.removeHomeSubscriptions();
+  }
+
+  removeHomeSubscriptions() {
     clearInterval(this.interval);
 
     this.appStateSubscription?.remove();
@@ -403,6 +490,8 @@ export default class HomeScreen extends React.Component<
       this.notificationResponseReceivedListener.remove();
       this.notificationResponseReceivedListener = null;
     }
+    this.notificationReceivedListener?.remove();
+    this.notificationReceivedListener = null;
   }
 
   startingSurvey: Promise<void> | null = null;
@@ -619,8 +708,7 @@ export default class HomeScreen extends React.Component<
           <Button
             title="Retry recovery"
             onPress={() => {
-              this.setState({ startupError: false, isLoading: true });
-              void this.componentDidMount();
+              void this.startHomeAsync();
             }}
           />
         </View>
