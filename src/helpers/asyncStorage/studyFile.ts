@@ -1,126 +1,68 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { StudyFileSchema } from "@wellping/study-schemas/lib/schemas/StudyFile";
-import { StreamsSchema } from "@wellping/study-schemas/lib/schemas/Stream";
-import {
-  StudyInfoSchema,
-  ExtraDataSchema,
-} from "@wellping/study-schemas/lib/schemas/StudyFile";
 import {
   StudyFile,
   Streams,
   StudyInfo,
   ExtraData,
 } from "@wellping/study-schemas/lib/types";
+import { withDataJournalLockAsync } from "../dataJournal";
+import { LOCAL_STORAGE_PREFIX } from "../../../config/local";
 
-import {
-  LOCAL_STORAGE_PREFIX,
-  IS_LOCAL_DEVELOPMENT,
-} from "../../../config/local";
-import { logAndThrowError } from "../debug";
+const KEY = `${LOCAL_STORAGE_PREFIX}currentStudyFile.v2`;
+const LEGACY = ["StudyInfo", "Streams", "ExtraData"].map(
+  (part) => `${LOCAL_STORAGE_PREFIX}currentStudyFile_${part}`,
+);
 
-const STUDY_INFO_KEY = `${LOCAL_STORAGE_PREFIX}currentStudyFile_StudyInfo`;
-const STREAMS_KEY = `${LOCAL_STORAGE_PREFIX}currentStudyFile_Streams`;
-const EXTRA_DATA_KEY = `${LOCAL_STORAGE_PREFIX}currentStudyFile_ExtraData`;
-
-const COMMITTED_STUDY_KEY = `${LOCAL_STORAGE_PREFIX}currentStudyFile.v2`;
-
-async function committedStudy(): Promise<StudyFile | null> {
-  const value = await AsyncStorage.getItem(COMMITTED_STUDY_KEY);
-  return value === null ? null : StudyFileSchema.parse(JSON.parse(value));
-}
-
-/** Read all sections from one committed generation. Legacy records are read-only. */
-export async function getCurrentStudyFileSnapshotAsync(): Promise<StudyFile> {
-  const current = await committedStudy();
-  if (current) return current;
-  const [info, streams, extra] = await Promise.all([
-    AsyncStorage.getItem(STUDY_INFO_KEY),
-    AsyncStorage.getItem(STREAMS_KEY),
-    AsyncStorage.getItem(EXTRA_DATA_KEY),
-  ]);
-  if (info === null || streams === null || extra === null)
-    throw new Error("No complete study configuration is available.");
-  return StudyFileSchema.parse({
-    studyInfo: JSON.parse(info),
-    streams: JSON.parse(streams),
-    extraData: JSON.parse(extra),
-  });
-}
-
+/** A single replacement prevents mixed questionnaire/configuration revisions. */
 export async function storeCurrentStudyFileAsync(studyFile: StudyFile) {
-  // One record is the commit boundary. A failed replacement cannot leave a mix
-  // of old info, new streams, and old extra data. Legacy keys remain read-only.
-  const validated = StudyFileSchema.parse(studyFile);
-  const previous = await getCurrentStudyInfoAsync();
-  if (
-    !IS_LOCAL_DEVELOPMENT &&
-    previous &&
-    (previous.id !== validated.studyInfo.id ||
-      JSON.stringify(previous.server) !==
-        JSON.stringify(validated.studyInfo.server))
-  ) {
-    throw new Error(
-      "Changing study identity or backend requires a new enrollment.",
-    );
-  }
-  await AsyncStorage.setItem(COMMITTED_STUDY_KEY, JSON.stringify(validated));
+  const study = StudyFileSchema.parse(studyFile);
+  await withDataJournalLockAsync(() =>
+    AsyncStorage.setItem(KEY, JSON.stringify({ version: 2, study })),
+  );
 }
 
 export async function clearCurrentStudyFileAsync() {
-  try {
-    await AsyncStorage.removeItem(STUDY_INFO_KEY);
-    await AsyncStorage.removeItem(STREAMS_KEY);
-    await AsyncStorage.removeItem(EXTRA_DATA_KEY);
-    await AsyncStorage.removeItem(COMMITTED_STUDY_KEY);
-  } catch (error) {
-    logAndThrowError(error);
-  }
+  // Commit a tombstone first: interrupted legacy cleanup must not resurrect it.
+  await withDataJournalLockAsync(async () => {
+    await AsyncStorage.setItem(
+      KEY,
+      JSON.stringify({ version: 2, study: null }),
+    );
+    for (const key of LEGACY) await AsyncStorage.removeItem(key);
+  });
 }
 
+export async function getCurrentStudyFileAsync(): Promise<StudyFile | null> {
+  const raw = await AsyncStorage.getItem(KEY);
+  if (raw !== null) {
+    const envelope = JSON.parse(raw);
+    if (!envelope || envelope.version !== 2 || !("study" in envelope))
+      throw new Error(
+        "Saved study configuration needs recovery; data preserved.",
+      );
+    return envelope.study === null
+      ? null
+      : StudyFileSchema.parse(envelope.study);
+  }
+  const parts = await Promise.all(
+    LEGACY.map((key) => AsyncStorage.getItem(key)),
+  );
+  if (parts.every((part) => part === null)) return null;
+  if (parts.some((part) => part === null))
+    throw new Error("Saved study configuration is incomplete; data preserved.");
+  return StudyFileSchema.parse({
+    studyInfo: JSON.parse(parts[0]!),
+    streams: JSON.parse(parts[1]!),
+    extraData: JSON.parse(parts[2]!),
+  });
+}
 export async function getCurrentStudyInfoAsync(): Promise<StudyInfo | null> {
-  try {
-    const committed = await committedStudy();
-    if (committed) return committed.studyInfo;
-    const value = await AsyncStorage.getItem(STUDY_INFO_KEY);
-    if (value == null) {
-      return null;
-    }
-    const studyInfo: StudyInfo = StudyInfoSchema.parse(JSON.parse(value));
-    return studyInfo;
-  } catch (error) {
-    // Preserve unreadable records for recovery; never erase on a read failure.
-    logAndThrowError(error);
-  }
+  return (await getCurrentStudyFileAsync())?.studyInfo ?? null;
 }
-
 export async function getCurrentStreamsAsync(): Promise<Streams | null> {
-  try {
-    const committed = await committedStudy();
-    if (committed) return committed.streams;
-    const value = await AsyncStorage.getItem(STREAMS_KEY);
-    if (value == null) {
-      return null;
-    }
-    const streams: Streams = StreamsSchema.parse(JSON.parse(value));
-    return streams;
-  } catch (error) {
-    // Preserve unreadable records for recovery; never erase on a read failure.
-    logAndThrowError(error);
-  }
+  return (await getCurrentStudyFileAsync())?.streams ?? null;
 }
-
 export async function getCurrentExtraDataAsync(): Promise<ExtraData | null> {
-  try {
-    const committed = await committedStudy();
-    if (committed) return committed.extraData;
-    const value = await AsyncStorage.getItem(EXTRA_DATA_KEY);
-    if (value == null) {
-      return null;
-    }
-    const extraData: ExtraData = ExtraDataSchema.parse(JSON.parse(value));
-    return extraData;
-  } catch (error) {
-    // Preserve unreadable records for recovery; never erase on a read failure.
-    logAndThrowError(error);
-  }
+  return (await getCurrentStudyFileAsync())?.extraData ?? null;
 }

@@ -90,9 +90,9 @@ export default class SearchableDropDown extends Component {
       this.props.onChangeText ||
       this.props.textInputProps.onChangeText;
     if (onTextChange && typeof onTextChange === "function") {
-      setTimeout(() => {
-        onTextChange(searchedText);
-      }, 0);
+      // Report the native edit before Next can run; deferring this callback
+      // could navigate away before the survey has queued its answer save.
+      onTextChange(searchedText);
     }
   };
 
@@ -142,9 +142,7 @@ export default class SearchableDropDown extends Component {
         <TouchableOpacity
           onPress={() => {
             this.setState({ item });
-            setTimeout(() => {
-              this.props.onItemSelect(item);
-            }, 0);
+            this.props.onItemSelect(item);
           }}
           style={{ ...this.props.itemStyle, flex: 1, flexDirection: "row" }}
         >
@@ -162,13 +160,11 @@ export default class SearchableDropDown extends Component {
           onPress={() => {
             this.setState({ item, focus: false });
             Keyboard.dismiss();
-            setTimeout(() => {
-              this.props.onItemSelect(item);
-              if (this.props.resetValue) {
-                this.setState({ focus: true, item: defaultItemValue });
-                this.input.focus();
-              }
-            }, 0);
+            this.props.onItemSelect(item);
+            if (this.props.resetValue) {
+              this.setState({ focus: true, item: defaultItemValue });
+              this.input.focus();
+            }
           }}
         >
           {this.props.selectedItems &&

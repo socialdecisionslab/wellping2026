@@ -1,21 +1,22 @@
-import { getCurrentNotificationTimeAsync } from "./helpers/notifications";
-import { getLatestPingAsync } from "./helpers/pings";
+import { getPingsAsync } from "./helpers/pings";
+import { isJournalPingActiveAsync } from "./helpers/dataJournal";
+import { waitForPendingSurveySavesAsync } from "./helpers/surveyAnswerWrites";
 import { StudyFile } from "@wellping/study-schemas/lib/types";
 import React from "react";
-import { Text } from "react-native";
+import { Button, Text, View } from "react-native";
 
 import HomeScreen from "./HomeScreen";
-import { clearCurrentStudyFileAsync } from "./helpers/asyncStorage/studyFile";
 import {
   storeTempStudyFileAsync,
   getTempStudyFileAsync,
   clearTempStudyFileAsync,
 } from "./helpers/asyncStorage/tempStudyFile";
+import { getCriticalProblemTextForUser } from "./helpers/debug";
+import { getVerifiedPendingLogoutAsync } from "./helpers/dataJournal";
 import {
-  getCriticalProblemTextForUser,
-  alertWithShareButtonContainingDebugInfoAsync,
-  getNonCriticalProblemTextForUser,
-} from "./helpers/debug";
+  isVerifiedPendingEnrollmentAsync,
+  completePendingEnrollmentAsync,
+} from "./helpers/failedEnrollment";
 import { validateAndInitializeFirebaseWithConfig } from "./helpers/firebase";
 import { secureGetUserAsync, User } from "./helpers/secureStore/user";
 import { isUsingFirebase } from "./helpers/server";
@@ -39,6 +40,10 @@ interface RootScreenState {
   isLoading: boolean;
   studyFileErrorText: string | null;
   survey?: StudyFile;
+  recoveryError?: boolean;
+  updateWarning?: boolean;
+  isLoggingOut?: boolean;
+  logoutError?: boolean;
 }
 
 export default class RootScreen extends React.Component<
@@ -56,7 +61,9 @@ export default class RootScreen extends React.Component<
   }
 
   async parseStudyFileAsync(rawJsonString: string): Promise<boolean> {
-    const parseErrorMessage = await parseAndStoreStudyFileAsync(rawJsonString);
+    const parseErrorMessage = await parseAndStoreStudyFileAsync(rawJsonString, {
+      freshEnrollment: true,
+    });
     if (parseErrorMessage !== null) {
       this.setState({
         isLoading: false,
@@ -128,34 +135,56 @@ export default class RootScreen extends React.Component<
     if (tempStudyFile === null) {
       return true;
     }
-    // A resumed survey must continue on the instrument it started with.
-    // Keep the staged update until a later launch after completion.
-    const latestPing = await getLatestPingAsync();
-    if (latestPing && !latestPing.endTime) {
-      const activeWindow = await getCurrentNotificationTimeAsync();
-      if (activeWindow?.getTime() === latestPing.notificationTime.getTime())
-        return true;
+    await waitForPendingSurveySavesAsync();
+    for (const ping of await getPingsAsync()) {
+      if (await isJournalPingActiveAsync(ping.id)) return true;
     }
-    const results = await this.parseStudyFileAsync(tempStudyFile);
-    // Consume rejected candidates too, so the next launch can use the last valid study.
-    await clearTempStudyFileAsync();
-    return results;
+    const error = await parseAndStoreStudyFileAsync(tempStudyFile);
+    if (error === null) await clearTempStudyFileAsync();
+    this.setState({ updateWarning: error !== null });
+    // A rejected update must not prevent use of the last complete valid study.
+    return true;
   }
 
-  async componentDidMount() {
-    try {
-      await this.loadInitialStudyAsync();
-    } catch (_) {
-      this.setState({
-        isLoading: false,
-        studyFileErrorText:
-          "Saved study data could not be loaded. Data has been preserved. Please restart or contact study staff.",
+  startup: Promise<void> | null = null;
+  componentDidMount() {
+    if (this.startup) return this.startup;
+    this.startup = this.initializeAsync()
+      .catch(() => {
+        this.setState({ isLoading: false, recoveryError: true });
+      })
+      .finally(() => {
+        this.startup = null;
       });
-    }
+    return this.startup;
   }
 
-  async loadInitialStudyAsync() {
+  async initializeAsync() {
+    // Probe the installation-scoped receipt before reading credentials or
+    // configuration: either may already be gone after interrupted teardown.
+    const pendingLogout = await getVerifiedPendingLogoutAsync();
+    if (pendingLogout) {
+      await logoutAsync(pendingLogout);
+      this.setState({
+        userInfo: null,
+        survey: undefined,
+        recoveryError: false,
+        logoutError: false,
+        isLoading: false,
+      });
+      return;
+    }
     if (await studyFileExistsAsync()) {
+      const stored = await getStudyFileAsync();
+      const savedUser = await secureGetUserAsync();
+      if (!savedUser) {
+        if (await isVerifiedPendingEnrollmentAsync(stored)) {
+          this.setState({ userInfo: null, isLoading: false });
+          return;
+        }
+        throw new Error("Saved session requires recovery.");
+      }
+      await completePendingEnrollmentAsync();
       if (!(await this.loadTempStudyFileAsync())) {
         return;
       }
@@ -165,43 +194,16 @@ export default class RootScreen extends React.Component<
       if (isUsingFirebase(survey.studyInfo)) {
         try {
           validateAndInitializeFirebaseWithConfig(survey.studyInfo);
-        } catch (e) {
-          await this.logoutFnAsync();
-          this.setState({ isLoading: false });
-          await alertWithShareButtonContainingDebugInfoAsync(
-            getCriticalProblemTextForUser(
-              `componentDidMount validateAndInitializeFirebaseWithConfig: ${e}`,
-            ),
-          );
-          return;
+        } catch (_) {
+          throw new Error("Study backend configuration requires recovery.");
         }
       }
 
       const user = await secureGetUserAsync();
-      if (user === null) {
-        // One reason this might happen is that the newly downloaded study file
-        // has changed the study ID in it. It makes `secureClearUserAsync` unable
-        // to get the user info (since the key is based on the study ID) and hence
-        // returns null. (So this is actually this expected behavior.)
-
-        // Notice that we have to do this before `downloadAndParseStudyFileAsync`
-        // or else the async function in `downloadAndParseStudyFileAsync` will
-        // still try to find study file when it is already deleted.
-        await this.logoutFnAsync();
-        this.setState({ isLoading: false });
-        await alertWithShareButtonContainingDebugInfoAsync(
-          getNonCriticalProblemTextForUser(
-            `You have been logged out for an unknown reason. ` +
-              `Please uninstall the app, reinstall the app, and try logging in again. ` +
-              `Your previous responses are still logged in our server after you reinstall the app.\n\n` +
-              `(REF: studyFileExistsAsync and user === null).`,
-          ),
-        );
-        return;
-      }
+      if (user === null) throw new Error("Saved session requires recovery.");
 
       // Do it in background because there isn't any urgency to redownload.
-      this.downloadAndParseStudyFileAsync({
+      void this.downloadAndParseStudyFileAsync({
         url: survey.studyInfo.studyFileURL,
         user,
         isRedownload: true,
@@ -209,7 +211,7 @@ export default class RootScreen extends React.Component<
           // No need to handle network error.
           // Just do it next time.
         },
-      });
+      }).catch(() => undefined);
 
       this.setState({ userInfo: user, survey });
     }
@@ -218,14 +220,53 @@ export default class RootScreen extends React.Component<
   }
 
   async logoutFnAsync() {
-    // Keep the active session visible if safe logout refuses pending data.
-    await logoutAsync();
-    this.setState({ userInfo: null, survey: undefined });
+    if (this.state.isLoggingOut) return;
+    // Commit the loading view first so Survey unmounts and stops accepting new
+    // events before the detached-save lane is drained and the archive closes.
+    await new Promise<void>((resolve) => {
+      this.setState({ isLoggingOut: true, logoutError: false }, resolve);
+    });
+    try {
+      await logoutAsync();
+      this.setState({
+        userInfo: null,
+        survey: undefined,
+        isLoggingOut: false,
+        logoutError: false,
+      });
+    } catch (error) {
+      let recoveryError = false;
+      try {
+        recoveryError = (await getVerifiedPendingLogoutAsync()) !== null;
+      } catch {
+        // Unreadable close evidence must not expose a potentially closed study.
+        recoveryError = true;
+      }
+      this.setState({ isLoggingOut: false, logoutError: true, recoveryError });
+      throw error;
+    }
   }
 
   render() {
     const { isLoading, userInfo, studyFileErrorText } = this.state;
-    if (isLoading) {
+    if (this.state.recoveryError) {
+      return (
+        <View style={{ padding: 24 }}>
+          <Text accessibilityRole="alert">
+            Saved study data needs recovery. Nothing has been deleted. Retry or
+            contact study staff; do not reinstall the app.
+          </Text>
+          <Button
+            title="Retry recovery"
+            onPress={() => {
+              this.setState({ recoveryError: false, isLoading: true });
+              void this.componentDidMount();
+            }}
+          />
+        </View>
+      );
+    }
+    if (isLoading || this.state.isLoggingOut) {
       return <LoadingScreen />;
     }
 
@@ -259,13 +300,27 @@ export default class RootScreen extends React.Component<
     }
 
     return (
-      <HomeScreen
-        studyInfo={this.state.survey.studyInfo}
-        streams={this.state.survey.streams}
-        logout={async () => {
-          await this.logoutFnAsync();
-        }}
-      />
+      <>
+        {this.state.logoutError && (
+          <Text accessibilityRole="alert">
+            Log out did not finish. Your data has been preserved. Complete any
+            survey and sync before trying again.
+          </Text>
+        )}
+        {this.state.updateWarning && (
+          <Text accessibilityRole="alert">
+            A study update could not be applied. Your saved study is still
+            active; contact study staff.
+          </Text>
+        )}
+        <HomeScreen
+          studyInfo={this.state.survey.studyInfo}
+          streams={this.state.survey.streams}
+          logout={async () => {
+            await this.logoutFnAsync();
+          }}
+        />
+      </>
     );
   }
 }

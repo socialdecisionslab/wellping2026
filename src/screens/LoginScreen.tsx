@@ -17,13 +17,13 @@ import { CONFIG } from "../../config/config";
 import {
   JS_VERSION_NUMBER,
   alertWithShareButtonContainingDebugInfoAsync,
-  getCriticalProblemTextForUser,
   shareDebugTextAsync,
 } from "../helpers/debug";
+import { completePendingEnrollmentAsync } from "../helpers/failedEnrollment";
 import { LoginSchema } from "../helpers/schemas/Login";
 import { User } from "../helpers/secureStore/user";
 import { getStudyFileAsync } from "../helpers/studyFile";
-import { loginAsync, logoutAsync } from "../helpers/users";
+import { loginAsync } from "../helpers/users";
 
 // This is an ugly hack so that the init url won't pop up again if the user log
 // in and then immediately log out.
@@ -159,6 +159,7 @@ export default class LoginScreen extends React.Component<
   }
 
   loginFnAsync = async () => {
+    if (this.state.disableLoginButton) return;
     this.setState({
       errorText: null,
       loadingText: null,
@@ -204,6 +205,7 @@ export default class LoginScreen extends React.Component<
     } catch (e) {
       this.setState({
         disableLoginButton: false,
+        loadingText: null,
         errorText: "Your login code is invalid. Please check it and try again.",
       });
       return;
@@ -213,34 +215,29 @@ export default class LoginScreen extends React.Component<
       loadingText: "Loading study data...",
     });
 
-    if (
-      !(await this.props.downloadAndParseStudyFileAsync({
+    let survey: Awaited<ReturnType<typeof getStudyFileAsync>>;
+    let error: string | null = null;
+    try {
+      const downloaded = await this.props.downloadAndParseStudyFileAsync({
         url: studyFileURL,
         user,
         isRedownload: false,
         handleNetworkErrorAsync: async (errorMessage) => {
-          this.setState({
-            errorText: errorMessage,
-            disableLoginButton: false,
-          });
+          this.setState({ errorText: errorMessage });
         },
-      }))
-    ) {
-      // We don't have to set `disableLoginButton` here because the page
-      // will be unmounted anyway (to show stuty file error page).
-      return;
-    }
-
-    const survey = await getStudyFileAsync();
-
-    this.setState({
-      loadingText: "Authenticating...",
-    });
-
-    let error: string | null = null;
-    try {
+      });
+      if (!downloaded) {
+        this.setState({ loadingText: null, disableLoginButton: false });
+        return;
+      }
+      survey = await getStudyFileAsync();
+      this.setState({ loadingText: "Authenticating..." });
       await loginAsync(user, survey.studyInfo);
-    } catch (e) {
+      await completePendingEnrollmentAsync();
+    } catch (_) {
+      // This attempt has no established research owner. General logout reads
+      // owner-scoped data and must never be used as failed-enrollment cleanup.
+      // Keep the pending receipt/configuration for safe retry after a restart.
       error =
         "Unable to authenticate. Check your login code or contact the study staff.";
     }
@@ -258,7 +255,7 @@ export default class LoginScreen extends React.Component<
             text: "Review",
             onPress: async () => {
               await WebBrowser.openBrowserAsync(
-                survey.studyInfo.consentFormUrl,
+                survey!.studyInfo.consentFormUrl,
               );
 
               this.setState(
@@ -278,8 +275,8 @@ export default class LoginScreen extends React.Component<
         { cancelable: false },
       );
     } else {
-      await logoutAsync();
       this.setState({
+        loadingText: null,
         errorText: error,
         disableLoginButton: false,
       });

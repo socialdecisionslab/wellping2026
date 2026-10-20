@@ -1,3 +1,4 @@
+import { withDataJournalLockAsync } from "./dataJournal";
 import { RELEASE } from "../../config/release";
 import { requestTextAsync } from "./http";
 import { base64ToBase64URL, getHashedPasswordAsync } from "./helpers";
@@ -11,29 +12,37 @@ export async function postBeiweV1Async(
   path: "enroll" | "upload",
   user: User,
   payload: unknown,
+  beforeSend?: () => Promise<void>,
 ) {
   if (!RELEASE) throw new Error("The study server is not configured.");
-  const response = await requestTextAsync(
-    `${RELEASE.beiweUrl}/wellping/v1/${path}`,
-    {
+  const url = `${RELEASE.beiweUrl}/wellping/v1/${path}`;
+  const body = JSON.stringify({
+    protocol: "wellping-v1",
+    credentials: {
+      username: user.username,
+      passwordHash: base64ToBase64URL(
+        await getHashedPasswordAsync(user.password),
+      ),
+    },
+    sessionId: await getLoginSessionIDAsync(user),
+    payload,
+  });
+  const send = () =>
+    requestTextAsync(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Accept: "application/json",
       },
-      body: JSON.stringify({
-        protocol: "wellping-v1",
-        credentials: {
-          username: user.username,
-          passwordHash: base64ToBase64URL(
-            await getHashedPasswordAsync(user.password),
-          ),
-        },
-        sessionId: await getLoginSessionIDAsync(user),
-        payload,
-      }),
-    },
-  );
+      body,
+    });
+  const { pending } = beforeSend
+    ? await withDataJournalLockAsync(async () => {
+        await beforeSend();
+        return { pending: send() };
+      })
+    : { pending: send() };
+  const response = await pending;
   if (response.status < 200 || response.status >= 300)
     throw new Error("The study server rejected the request.");
   try {
@@ -46,9 +55,10 @@ export async function postBeiweV1Async(
 export async function uploadBeiweV1Async(
   data: UploadData,
   user: User,
+  beforeSend?: () => Promise<void>,
 ): Promise<DataUploadServerResponse> {
   if (!data.receipt) throw new Error("Upload receipt is missing.");
-  const response = await postBeiweV1Async("upload", user, data);
+  const response = await postBeiweV1Async("upload", user, data, beforeSend);
   // A 2xx or count alone does not authorize removing local pending data.
   if (
     !response ||

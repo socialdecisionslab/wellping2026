@@ -1,4 +1,7 @@
-import type { UploadRevisions } from "./uploadRevisions";
+export type UploadRevisions = Record<
+  string,
+  { revision: number; studyVersion: string | null }
+>;
 import { Answer } from "@wellping/study-schemas/lib/answerTypes";
 import { Ping } from "@wellping/study-schemas/lib/types";
 

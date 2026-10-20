@@ -40,3 +40,20 @@ test.each([
     expect(() => reconcile(expected, candidate)).toThrow();
   },
 );
+
+test.each([
+  { ...expected, answers: [{ ...expected.answers[0], pingId: "missing" }] },
+  {
+    ...expected,
+    revisions: {
+      ...expected.revisions,
+      extra: { revision: 1, studyVersion: "pilot-1" },
+    },
+  },
+  { ...expected, revisions: { p1: { revision: 0, studyVersion: "pilot-1" } } },
+])(
+  "invalid expected fixtures cannot certify an equally invalid export",
+  (fixture) => {
+    expect(() => reconcile(fixture, fixture)).toThrow();
+  },
+);

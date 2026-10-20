@@ -12,15 +12,17 @@ import {
 import { isThisWeek } from "date-fns";
 import * as Crypto from "expo-crypto";
 
+import { IS_LOCAL_DEVELOPMENT } from "../../config/local";
 import { STUDY_FILE_URL_PREFIXES_WHITELIST } from "../../config/studyWhitelist";
 import {
   storeCurrentStudyFileAsync,
-  getCurrentStudyFileSnapshotAsync,
+  getCurrentStudyFileAsync,
   getCurrentStudyInfoAsync,
   getCurrentStreamsAsync,
   getCurrentExtraDataAsync,
 } from "./asyncStorage/studyFile";
 import { validateAndInitializeFirebaseWithConfig } from "./firebase";
+import { preparePendingEnrollmentAsync } from "./failedEnrollment";
 import { ignoreTimeObjectTimezone } from "./helpers";
 import { getHttpsOrigin } from "./networkSafety";
 import { isUsingFirebase } from "./server";
@@ -134,7 +136,6 @@ export async function downloadStudyFileAsync({
       );
     return response.text;
   }
-
   const queryObject: { [key: string]: string } = {
     username,
     password: passwordHash,
@@ -209,6 +210,7 @@ export async function downloadStudyFileAsync({
  */
 export async function parseAndStoreStudyFileAsync(
   rawJsonString: string,
+  { freshEnrollment = false }: { freshEnrollment?: boolean } = {},
 ): Promise<string | null> {
   try {
     const parsedStudy = StudyFileSchema.parse(JSON.parse(rawJsonString));
@@ -222,13 +224,25 @@ export async function parseAndStoreStudyFileAsync(
     ) {
       throw new Error("Study configuration does not match this release.");
     }
+    const previous = await getCurrentStudyFileAsync();
+    if (
+      previous &&
+      previous.studyInfo.id !== parsedStudy.studyInfo.id &&
+      !(
+        IS_LOCAL_DEVELOPMENT &&
+        Object.keys(previous.studyInfo.server).length === 0 &&
+        Object.keys(parsedStudy.studyInfo.server).length === 0
+      )
+    )
+      throw new Error("End the current study session before changing studies.");
     if (isUsingFirebase(parsedStudy.studyInfo)) {
       validateAndInitializeFirebaseWithConfig(parsedStudy.studyInfo);
     }
+    if (freshEnrollment) await preparePendingEnrollmentAsync(parsedStudy);
     await storeCurrentStudyFileAsync(parsedStudy);
     return null;
   } catch (e) {
-    // Failed validation or commit leaves the previous complete record intact.
+    // Preserve the last complete saved configuration on any failed replacement.
     return "Study configuration is invalid. Contact the study team.";
   }
 }
@@ -295,7 +309,9 @@ export async function getExtraDataAsync(): Promise<ExtraData> {
  * Throws an error if there isn't any current study file stored.
  */
 export async function getStudyFileAsync(): Promise<StudyFile> {
-  return getCurrentStudyFileSnapshotAsync();
+  const study = await getCurrentStudyFileAsync();
+  if (!study) throw new Error("No saved study configuration.");
+  return study;
 }
 
 /**

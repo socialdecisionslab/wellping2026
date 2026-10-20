@@ -82,25 +82,31 @@ function load(file, mocks) {
   }
   let dequeued = false;
   const upload = load("src/helpers/dataUpload.ts", {
-    "expo-crypto": {},
-    "./dataLock": {},
-    "./uploadActivity": { beginUpload() {}, finishUpload() {} },
-    "./uploadRevisions": {},
-    "./answers": {},
-    "./asyncStorage/unuploadedPingsList": {
-      removeFromUnuploadedPingsListAsync: async () => {
+    "expo-crypto": {
+      CryptoDigestAlgorithm: { SHA256: "SHA256" },
+      digestStringAsync: async () => "synthetic-receipt",
+    },
+    "../../config/release": { RELEASE: undefined },
+    "./beiwe": {},
+    "./firebase": {},
+    "./dataJournal": {
+      captureDataSnapshotAsync: async () => ({
+        owner: { username: "fixture", loginSessionId: "synthetic-session" },
+        user: { username: "fixture" },
+        pings: [{ id: "fixture" }],
+        answers: [],
+        revisions: { fixture: 1 },
+        studyVersions: { fixture: "synthetic-v1" },
+      }),
+      assertDataOwnerAsync: async () => {},
+      acknowledgeDataSnapshotAsync: async () => {
         dequeued = true;
       },
     },
-    "./beiwe": {},
-    "./firebase": {},
-    "./loginSession": {},
-    "./pings": {},
-    "./secureStore/user": {
-      secureGetUserAsync: async () => ({ username: "fixture" }),
-    },
-    "./server": { isUsingServer: () => false },
+    "./studyFile": { getStudyInfoAsync: async () => ({ server: {} }) },
+    "./server": { isUsingFirebase: () => false, isUsingBeiwe: () => false },
     "./debug": {
+      getUserInstallationInfoAsync: async () => ({ synthetic: true }),
       HOME_SCREEN_DEBUG_VIEW_SYMBOLS: {
         UPLOAD: { UPLOADING: "~", INITIAL: "" },
       },
@@ -109,7 +115,6 @@ function load(file, mocks) {
   await assert.rejects(
     upload.uploadDataAsync({ server: {} }, () => {}, {
       unuploadedOnly: false,
-      prefetchedData: { pings: [{ id: "fixture" }] },
     }),
     /No upload server/,
   );

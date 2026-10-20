@@ -3,41 +3,17 @@ import { AnswerSchema } from "@wellping/study-schemas/lib/schemas/Answer";
 import { Question, Ping } from "@wellping/study-schemas/lib/types";
 
 import {
-  getAnswersPingIdsQuestionIdsListAsync,
-  clearAnswersPingIdsQuestionIdsListAsync,
-} from "./asyncStorage/answersPingIdsQuestionIdsList";
-import {
-  secureGetAnswerAsync,
-  secureStoreAnswerAsync,
-  secureRemoveAnswerAsync,
-} from "./secureStore/answer";
+  captureDataSnapshotAsync,
+  removeJournalRecordsAsync,
+} from "./dataJournal";
+import { secureStoreAnswerAsync } from "./secureStore/answer";
 
 export async function getAnswersAsync({
   unuploadedOnly = false,
 }: {
   unuploadedOnly?: boolean;
 } = {}): Promise<Answer[]> {
-  const answersList = await getAnswersPingIdsQuestionIdsListAsync({
-    unuploadedOnly,
-  });
-
-  // https://stackoverflow.com/q/28066429/2603230
-  const answers: Answer[] = await Promise.all(
-    answersList.map(async (pingIdAndQuestionId) => {
-      const answer = await secureGetAnswerAsync(
-        pingIdAndQuestionId[0],
-        pingIdAndQuestionId[1],
-      );
-      if (answer === null) {
-        throw new Error(
-          "answer === null in answersList.map in getAnswersAsync.",
-        );
-      }
-      return answer;
-    }),
-  );
-
-  return answers;
+  return (await captureDataSnapshotAsync({ unuploadedOnly })).answers;
 }
 
 export async function insertAnswerAsync({
@@ -47,6 +23,7 @@ export async function insertAnswerAsync({
   preferNotToAnswer,
   data,
   date,
+  expectedOwnerId,
 }: {
   ping: Ping;
   question: Question;
@@ -54,6 +31,7 @@ export async function insertAnswerAsync({
   preferNotToAnswer: true | null; // See `MARK: WHY_PNA_TRUE_OR_NULL`.
   data: AnswerData | null;
   date: Date;
+  expectedOwnerId?: string;
 }): Promise<Answer> {
   const answer = AnswerSchema.parse({
     pingId: ping.id,
@@ -63,20 +41,11 @@ export async function insertAnswerAsync({
     date,
   });
 
-  await secureStoreAnswerAsync(answer);
+  await secureStoreAnswerAsync(answer, expectedOwnerId);
 
   return answer;
 }
 
-export async function clearAllAnswersAsync() {
-  const answersList = await getAnswersPingIdsQuestionIdsListAsync();
-  await Promise.all(
-    answersList.map(async (pingIdAndQuestionId) => {
-      await secureRemoveAnswerAsync(
-        pingIdAndQuestionId[0],
-        pingIdAndQuestionId[1],
-      );
-    }),
-  );
-  await clearAnswersPingIdsQuestionIdsListAsync();
+export function clearAllAnswersAsync(): Promise<void> {
+  return removeJournalRecordsAsync({ allAnswers: true });
 }

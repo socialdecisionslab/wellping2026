@@ -100,7 +100,20 @@ const safety = load("src/helpers/networkSafety.ts");
     ),
   );
   let ended;
+  const syntheticUser = {
+    username: "demo",
+    password: "SECRET",
+    loginDate: "2026-01-01T00:00:00.000Z",
+  };
+  const syntheticPayload = {
+    user: { username: "demo", loginSessionId: "SYNTHETIC_SESSION" },
+    pings: [],
+    answers: [],
+  };
   const beiwe = load("src/helpers/beiwe.ts", {
+    "./dataJournal": {
+      withDataJournalLockAsync: async (operation) => operation(),
+    },
     "react-native": { Platform: { OS: "android" } },
     "./helpers": {
       getHashedPasswordAsync: async () => "SYNTHETIC_SECRET",
@@ -109,23 +122,33 @@ const safety = load("src/helpers/networkSafety.ts");
     "./loginSession": {
       getLoginSessionIDAsync: async () => "SYNTHETIC_SESSION",
     },
-    "./studyFile": { getStudyInfoAsync: async () => ({}) },
+    "./studyFile": {
+      getStudyInfoAsync: async () => ({ id: "synthetic-study" }),
+    },
+    "./secureStore/user": {
+      secureGetUserAsync: async () => ({ ...syntheticUser }),
+    },
     "./server": {
       getBeiweServerConfig: () => ({ serverUrl: "https://example.com" }),
     },
   });
   for (const status of [302, 401, 403, 500]) {
-    fetchMock = async () => ({ status, json: async () => ({}) });
+    let requested = false;
+    fetchMock = async () => {
+      requested = true;
+      return { status, json: async () => ({}) };
+    };
     await assert.rejects(
       beiwe.beiweUploadDataForUserAsync(
-        {},
-        { username: "demo", password: "SECRET" },
+        syntheticPayload,
+        syntheticUser,
         () => {},
         (x) => (ended = x),
       ),
       (error) => !/SECRET|SESSION|https:/.test(error.message),
     );
     assert.ok(ended);
+    assert(requested, "status rejection must exercise the network boundary");
   }
   fetchMock = async () => {
     throw Error("https://example.com/?password=SECRET");
@@ -141,8 +164,8 @@ const safety = load("src/helpers/networkSafety.ts");
   assert.equal(
     (
       await beiwe.beiweUploadDataForUserAsync(
-        {},
-        { username: "demo", password: "SECRET" },
+        syntheticPayload,
+        syntheticUser,
         () => {},
         () => {},
       )

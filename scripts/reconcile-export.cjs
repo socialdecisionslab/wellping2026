@@ -66,10 +66,17 @@ function reconcile(expected, exported) {
       throw Error(`Export ${name} do not exactly match expected records.`);
     counts[name] = wanted.size;
   }
+  const pingIds = new Set(expected.pings.map((p) => p.id));
+  if (
+    expected.answers.some((a) => !pingIds.has(a.pingId)) ||
+    Object.keys(expected.revisions).some((id) => !pingIds.has(id))
+  )
+    throw Error("Expected records contain orphan answers or revisions.");
   for (const p of expected.pings) {
     if (
       !expected.revisions[p.id]?.studyVersion ||
-      !Number.isSafeInteger(expected.revisions[p.id]?.revision)
+      !Number.isSafeInteger(expected.revisions[p.id]?.revision) ||
+      expected.revisions[p.id].revision < 1
     )
       throw Error("Expected study version/revision is missing.");
   }

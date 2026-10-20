@@ -47,10 +47,24 @@ export async function getNotificationTimesAsync(): Promise<
     }[] = JSON.parse(value);
     const timesInfo: NotificationDateWithExpirationDate[] = timesInfoString.map(
       (dateInfoString) => {
-        return {
-          notificationDate: new Date(dateInfoString.notificationDate),
-          expirationDate: new Date(dateInfoString.expirationDate),
-        };
+        if (
+          typeof dateInfoString.notificationDate !== "string" ||
+          typeof dateInfoString.expirationDate !== "string"
+        )
+          throw new Error(
+            "Saved notification schedule needs recovery; data preserved.",
+          );
+        const notificationDate = new Date(dateInfoString.notificationDate);
+        const expirationDate = new Date(dateInfoString.expirationDate);
+        if (
+          !Number.isFinite(+notificationDate) ||
+          !Number.isFinite(+expirationDate) ||
+          expirationDate < notificationDate
+        )
+          throw new Error(
+            "Saved notification schedule needs recovery; data preserved.",
+          );
+        return { notificationDate, expirationDate };
       },
     );
     return timesInfo;
