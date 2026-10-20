@@ -2,7 +2,7 @@
 
 Each row records rationale, modules, risk, prerequisite, acceptance and verification. No item authorizes merging or deployment.
 
-October 20 integration: the [current candidate assessment](modernization/integrated-candidate-2026-10-20.md) supersedes the branch-specific status counts below. It combines the mobile stack and PR #13 safeguards; published-head CI, independent review, backend validation and physical-device checks remain required.
+October 20 integration: the [PR resolution record](modernization/pr-resolution-2026-10-20.md) supersedes the branch-specific status counts below. PR #14 combines the mobile stack, PR #13 safeguards and #10/#11 local workbench/operations. The initial mobile candidate passed hosted application and native gates; final combined-head CI, independent approval, backend validation and physical-device checks remain required.
 
 | Priority / ID | Work and rationale | Modules / risk | Prerequisite | Acceptance and verification | Status |
 | --- | --- | --- | --- | --- | --- |
@@ -13,7 +13,7 @@ October 20 integration: the [current candidate assessment](modernization/integra
 | P1 SCHEDULING | Verify restart and rollover reliability without altering protocols | notifications / medium | Existing cache regressions | Review DST/timezone and interrupted scheduling coverage; only fix demonstrated defects | Same-day/cache/rollover covered; DST semantics need study-owner decision |
 | P1 NATIVE | Establish native behavior rather than infer from bundles | CI, platform runtime / high | Exact-head CI and devices | Mandatory native smoke plus physical notification/storage tests | CI pending; devices unavailable |
 | P2 DEPS | Remediate tooling vulnerabilities when compatible fixes exist | Lockfile, tooling / medium | Upstream fix or approved exception | Fresh audit, tests, bundles and native builds; no suppressed findings | Two high findings under time-limited exception; moderate exposure traced; four-module bundle guard added; no compatible fix applied |
-| P2 TOOLS | Avoid duplicating useful unmerged work | Draft PRs #10/#11 / medium | Separate code review | Review console/operational safeguards independently before adoption | Deferred |
+| P2 TOOLS | Avoid duplicating useful unmerged work | PR #14 / medium | Review integrated workbench and recovery | Local console/backup, schema/export validation, non-destructive recovery and provenance checked together | Integrated for review; production researcher roles/backend and browser accessibility remain open |
 | P3 RECOVERY-UX | Explain recoverable failures without discarding responses | HomeScreen / medium | HOME-ERROR | Visible retry with preserved data; synthetic interaction tests | Complete with HOME-ERROR |
 | P4 DOCS | Make baseline reproducible and resumable | docs, AGENTS / low | Measured baseline | Accurate commands, architecture, safety gates and progress | Complete; maintain with each unit |
 | P4 REVIEW | Preserve human integration safeguards | GitHub / high | Eligible independent reviewer | Exact-candidate approval and explicit merge authorization | Human gate |

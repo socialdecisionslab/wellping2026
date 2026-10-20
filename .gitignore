@@ -79,3 +79,6 @@ coverage/**/*
 # Python smoke-check bytecode.
 __pycache__/
 *.pyc
+
+# Local researcher tool compilation; never contains study/participant data.
+/.research-console-build/

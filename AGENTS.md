@@ -9,5 +9,5 @@
 - Bind asynchronous participant work to its initiating owner. Use existing journal serialization; do not nest journal-locking APIs.
 - Logout must block active or unsynced responses. Ambiguous ownership fails closed. Successful upload does not authorize deletion.
 - JavaScript tests and bundles do not prove native-device or backend compatibility.
-- Keep verified changes in small commits on a dedicated branch. Do not merge, deploy, force-push, or commit generated dependencies.
+- Keep verified changes in small commits on a dedicated branch. Merge only with user authorization and all enforced repository requirements satisfied. Do not bypass independent approval, deploy without separate authorization, force-push, or commit generated dependencies.
 - The development-only dependency exception expires October 24, 2026, or earlier on exposure changes or available fixes; see the security follow-up linked in `docs/DECISIONS.md`.

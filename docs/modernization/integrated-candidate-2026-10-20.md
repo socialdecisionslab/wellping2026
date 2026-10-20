@@ -1,5 +1,7 @@
 # App assessment and consolidated mobile candidate — October 20, 2026
 
+Continuation: the user requested resolution of all PRs after this initial assessment. The [PR resolution record](pr-resolution-2026-10-20.md) documents the added #10/#11 work, final combined verification and consolidation into PR #14. Statements below about those drafts remaining separate describe the initial mobile-only checkpoint.
+
 WellPing is a development candidate with substantial questionnaire and data-recovery coverage. It is not ready for participant enrollment. The modernized code remains outside `main`, and client tests do not establish backend durability, phone behavior, signing, or study approval.
 
 ## Source and scope

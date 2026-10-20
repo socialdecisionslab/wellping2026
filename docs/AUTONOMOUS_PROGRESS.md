@@ -1,6 +1,6 @@
 # Autonomous progress
 
-Current continuation point: [October 20 consolidated mobile candidate](modernization/integrated-candidate-2026-10-20.md), branch `codex/consolidate-mobile-candidate`. The entries below describe the earlier PR #12 work and its authorization at the time. The current user authorized repository updates; this continuation prepares a separate review branch without merging existing PRs or deploying.
+Current continuation point: [October 20 PR resolution record](modernization/pr-resolution-2026-10-20.md), PR #14, branch `codex/consolidate-mobile-candidate`. The user subsequently authorized resolving all PRs, including eligible merges and superseded closures. The earlier entries below record their original scope; GitHub's independent approval and required checks still govern entry into `main`. Participant deployment remains a separate decision.
 
 Baseline: `ba0e1078009d07fe14030b7d7d34a18e92ec09a3`.
 Branch: `codex/autonomous-reliability-20261017` in an isolated checkout. Previous checkout edits are untouched.

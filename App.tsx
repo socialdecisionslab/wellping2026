@@ -6,10 +6,8 @@ import { StatusBar } from "expo-status-bar";
 import React from "react";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 
+import RecoveryBoundary from "./src/components/RecoveryBoundary";
 import RootScreen from "./src/RootScreen";
-
-// TODO: USE https://github.com/carloscuesta/react-native-error-boundary
-// once https://github.com/expo/expo/issues/6598 is solved.
 
 export default function App() {
   return (
@@ -21,7 +19,9 @@ export default function App() {
             signed study app.
           </Text>
         ) : (
-          <RootScreen />
+          <RecoveryBoundary>
+            <RootScreen />
+          </RecoveryBoundary>
         )}
         <StatusBar style="dark" />
       </SafeAreaView>

@@ -28,7 +28,7 @@ A React Native survey app that pings you once a while to answer questions!
 
 ## Development
 
-The canonical repository is [socialdecisionslab/wellping2026](https://github.com/socialdecisionslab/wellping2026). As of October 20, 2026, `main` remains the older baseline. The `codex/consolidate-mobile-candidate` branch combines the mobile foundation, participant experience, lifecycle recovery, and PR #13 release safeguards for review. See the [current app assessment and next steps](docs/modernization/integrated-candidate-2026-10-20.md) for source commits, validation, and release gates. CI badges are not participant-release approval.
+The canonical repository is [socialdecisionslab/wellping2026](https://github.com/socialdecisionslab/wellping2026). As of October 20, 2026, `main` remains the older baseline. [PR #14](https://github.com/socialdecisionslab/wellping2026/pull/14) consolidates the mobile foundation, participant experience, lifecycle recovery, PR #13 release safeguards, local researcher workbench, and operational recovery/provenance work. See the [PR resolution record](docs/modernization/pr-resolution-2026-10-20.md) and [app assessment](docs/modernization/integrated-candidate-2026-10-20.md) for source commits, validation, and release gates. CI badges are not participant-release approval.
 
 The modernization candidate uses Expo **57.0.30**, React Native **0.86.3**, Node **22.23.3**, and Corepack-pinned Yarn **4.18.1**.
 

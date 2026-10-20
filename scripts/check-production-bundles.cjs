@@ -55,6 +55,8 @@ try {
       "src/HomeScreen.tsx",
       "src/screens/LoginScreen.tsx",
       "src/components/SyncStatus.tsx",
+      "src/components/RecoveryBoundary.tsx",
+      "src/helpers/localDiagnostics.ts",
     ])
       assert(
         sources.some((name) => name.endsWith(source)),

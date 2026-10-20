@@ -5,6 +5,46 @@ import tseslint from "typescript-eslint";
 // intentionally contain `any`; typecheck and synthetic contract tests cover them.
 export default tseslint.config(
   {
+    files: [
+      "researcher-console/**/*.{js,cjs}",
+      "scripts/build-research-console.cjs",
+      "scripts/release-manifest.cjs",
+    ],
+    extends: [js.configs.recommended],
+    languageOptions: {
+      globals: Object.fromEntries(
+        [
+          "require",
+          "module",
+          "__dirname",
+          "process",
+          "console",
+          "Buffer",
+          "AbortSignal",
+          "setTimeout",
+          "URL",
+          "structuredClone",
+          "fetch",
+          "global",
+          "document",
+          "Blob",
+        ].map((name) => [name, "readonly"]),
+      ),
+    },
+    rules: {
+      "no-unused-vars": [
+        "error",
+        { argsIgnorePattern: "^_", caughtErrorsIgnorePattern: "^_" },
+      ],
+      "no-eval": "error",
+      "no-new-func": "error",
+    },
+  },
+  {
+    files: ["researcher-console/tests/*.test.cjs"],
+    rules: { "no-eval": "off" },
+  }, // Execute our own browser script inside an isolated synthetic DOM fixture.
+  {
     ignores: [
       "node_modules/**",
       "android/**",
