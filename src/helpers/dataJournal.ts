@@ -1149,6 +1149,16 @@ export function acknowledgeDataSnapshotAsync(
     if (changed) await commit(context, index, []);
   });
 }
+/** Atomic, content-free participant sync summary for the current research owner. */
+export function getJournalSyncSummaryAsync(): Promise<{
+  total: number;
+  pending: number;
+}> {
+  return run(async (_context, index) => ({
+    total: index.pings.length,
+    pending: index.pings.filter((id) => own(index.dirty, id)).length,
+  }));
+}
 export function getJournalPingIdsAsync(
   unuploadedOnly = false,
 ): Promise<string[]> {

@@ -2,38 +2,39 @@ name: Native test builds
 on:
   workflow_dispatch:
   push:
-    branches: [codex/modernize-mobile-runtime]
-    paths:
-      - ".github/workflows/native-preview.yml"
-      - "scripts/native/**"
-      - "scripts/simulator.entitlements"
-      - "config/**"
-      - "App.tsx"
-      - "index.js"
-      - "metro.config.js"
-      - "babel.config.js"
-      - "vendor/**"
-      - "app.config.js"
-      - "app.json"
-      - "package.json"
-      - "yarn.lock"
-      - "local/**"
-      - "src/**"
+    branches:
+      - main
+      - codex/modernize-mobile-runtime
+      - modernization/mobile-foundation-pr7
+      - modernization/participant-experience-pr8
+  pull_request:
+    branches:
+      - main
+      - codex/modernize-mobile-runtime
+      - modernization/mobile-foundation-pr7
+      - modernization/participant-experience-pr8
+    types: [opened, synchronize, reopened, ready_for_review, edited]
 permissions:
   contents: read
 concurrency:
-  group: native-preview-${{ github.ref }}
+  group: native-preview-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 env:
   WELLPING_LOCAL_ONLY: "1"
   EXPO_NO_TELEMETRY: "1"
   CI: "1"
+  REVIEWED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
 jobs:
   android:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          ref: ${{ env.REVIEWED_SHA }}
+      - name: Record exact source and workflow run
+        run: bash scripts/native/build-identity.sh record .
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
@@ -53,10 +54,15 @@ jobs:
           head -5 android-badging.txt
           grep -F "package: name='app.wellping.local'" android-badging.txt
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify android/app/build/outputs/apk/release/app-release.apk
+      - name: Stage Android artifact with source identity
+        run: |
+          mkdir -p native-artifact
+          cp android/app/build/outputs/apk/release/app-release.apk native-artifact/app-release.apk
+          cp reviewed-sha.txt build-run-id.txt native-artifact/
       - uses: actions/upload-artifact@v4
         with:
           name: Well-Ping-Local-Android
-          path: android/app/build/outputs/apk/release/app-release.apk
+          path: native-artifact/
           if-no-files-found: error
           retention-days: 14
   ios-simulator:
@@ -65,7 +71,12 @@ jobs:
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.4.1.app/Contents/Developer
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          ref: ${{ env.REVIEWED_SHA }}
+      - name: Record exact source and workflow run
+        run: bash scripts/native/build-identity.sh record .
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
@@ -85,7 +96,10 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: Well-Ping-Local-iOS-Simulator
-          path: Well-Ping-Local-Simulator.zip
+          path: |
+            Well-Ping-Local-Simulator.zip
+            reviewed-sha.txt
+            build-run-id.txt
           if-no-files-found: error
           retention-days: 14
       - uses: actions/upload-artifact@v4
@@ -94,3 +108,26 @@ jobs:
           name: iOS-build-log
           path: ios-build.log
           retention-days: 7
+  android-smoke:
+    needs: android
+    uses: ./.github/workflows/android-smoke.yml
+    with:
+      reviewed-sha: ${{ github.event.pull_request.head.sha || github.sha }}
+  ios-smoke:
+    needs: ios-simulator
+    uses: ./.github/workflows/simulator-smoke.yml
+    with:
+      reviewed-sha: ${{ github.event.pull_request.head.sha || github.sha }}
+  native-validation:
+    if: always()
+    needs: [android, ios-simulator, android-smoke, ios-smoke]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require every native gate to succeed
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          printf '%s\n' "$RESULTS" >> "$GITHUB_STEP_SUMMARY"
+          printf 'Reviewed source: %s\n' "$REVIEWED_SHA" >> "$GITHUB_STEP_SUMMARY"
+          printf '%s\n' "$RESULTS" | jq -e 'length == 4 and all(.[]; .result == "success")'

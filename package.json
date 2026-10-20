@@ -16,7 +16,8 @@
     "prebuild:local": "WELLPING_LOCAL_ONLY=1 expo prebuild",
     "android:local": "WELLPING_LOCAL_ONLY=1 expo run:android",
     "ios:local": "WELLPING_LOCAL_ONLY=1 expo run:ios",
-    "smoke:release": "node scripts/smoke-release.cjs"
+    "smoke:release": "node scripts/smoke-release.cjs",
+    "lint": "eslint \"src/**/*.{ts,tsx}\" \"local/**/*.{ts,tsx}\" \"config/**/*.{ts,tsx}\" App.tsx"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.2.0",
@@ -52,6 +53,7 @@
   },
   "devDependencies": {
     "@babel/core": "^7.28.0",
+    "@eslint/js": "10.0.1",
     "@react-native/jest-preset": "0.86.3",
     "@testing-library/react-native": "13.3.3",
     "@types/jest": "^29.5.14",
@@ -59,20 +61,16 @@
     "@types/node": "^22.0.0",
     "@types/react": "~19.2.0",
     "@types/react-test-renderer": "^19.1.0",
-    "@typescript-eslint/eslint-plugin": "^5.8.0",
-    "@typescript-eslint/parser": "^5.8.0",
     "babel-preset-expo": "~57.0.0",
-    "eslint": "^8.5.0",
-    "eslint-config-prettier": "^8.3.0",
-    "eslint-config-universe": "^9.0.0",
-    "eslint-plugin-prettier": "^4.0.0",
+    "eslint": "10.13.0",
     "jest": "^29.7.0",
     "jest-date-mock": "^1.0.8",
     "jest-expo": "~57.0.6",
     "prettier": "^2.5.1",
     "react-refresh": "^0.14.2",
     "react-test-renderer": "19.2.3",
-    "typescript": "~5.9.2",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.71.2",
     "wait-for-expect": "^3.0.2"
   },
   "jest": {
@@ -128,6 +126,7 @@
     "node": "22.23.3"
   },
   "resolutions": {
-    "zod@^3.11.6": "3.25.76"
+    "zod@^3.11.6": "3.25.76",
+    "@grpc/grpc-js": "1.14.6"
   }
 }

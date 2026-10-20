@@ -23,7 +23,6 @@ export default function App() {
         ) : (
           <RootScreen />
         )}
-        {/* eslint-disable-next-line react/style-prop-object */}
         <StatusBar style="dark" />
       </SafeAreaView>
     </SafeAreaProvider>

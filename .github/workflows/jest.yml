@@ -25,9 +25,17 @@ jobs:
         run: node scripts/check-environment.cjs
       - name: Install exact dependencies
         run: corepack yarn install --immutable
+      - name: Check exact-commit native workflow triggers
+        run: node scripts/check-native-workflows.cjs
+      - name: Test native smoke readiness handling
+        run: python3 -m unittest discover -s scripts/tests -p 'test_*.py'
+      - name: Lint source correctness
+        run: corepack yarn lint
       - name: Type-check and test with synthetic data
         run: corepack yarn test:ci
       - name: Compile isolated iOS and Android bundles
         run: corepack yarn smoke:local
       - name: Compile participant iOS and Android bundles with synthetic staging config
         run: corepack yarn smoke:release
+      - name: Compile production participant UI without launching or backend access
+        run: node scripts/check-production-bundles.cjs

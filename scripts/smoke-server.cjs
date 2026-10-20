@@ -37,20 +37,25 @@ async function manifest(platform) {
   assert.equal(response.status, 200);
   return response.json();
 }
-(async () => {
+async function readyManifest(platform) {
   const deadline = Date.now() + 90000;
   for (;;) {
     try {
-      await manifest("ios");
-      break;
+      return await manifest(platform);
     } catch (error) {
       if (exited || Date.now() > deadline)
-        throw new Error(`Local server failed: ${error.message}\n${logs}`);
+        throw new Error(
+          `Local ${platform} server failed: ${error.message}\n${logs}`,
+        );
       await new Promise((resolve) => setTimeout(resolve, 500));
     }
   }
+}
+(async () => {
   for (const platform of ["ios", "android"]) {
-    const value = await manifest(platform);
+    // Each platform may need its own cold Metro initialization. Readiness of
+    // iOS alone is not proof that Android can respond within one request timeout.
+    const value = await readyManifest(platform);
     const config = value.extra.expoClient;
     assert.equal(config.extra.wellpingLocalOnly, true);
     assert.equal(config.updates.enabled, false);

@@ -1,0 +1,81 @@
+{
+  "checkedOn": "2026-10-17",
+  "source": "yarn npm audit --recursive --json",
+  "baselineFindingCount": 112,
+  "currentFindingCount": 9,
+  "note": "Registry findings include deprecation notices and do not by themselves establish runtime exploitability. No critical findings remain; two high upstream findings are unresolved.",
+  "findings": [
+    {
+      "package": "abab",
+      "severity": "moderate",
+      "issue": "Use your platform's native atob() and btoa() methods instead",
+      "advisory": null,
+      "versions": ["2.0.6"],
+      "dependents": ["jsdom"]
+    },
+    {
+      "package": "braces",
+      "severity": "high",
+      "issue": "braces vulnerable to stack-exhaustion denial of service through deeply nested patterns",
+      "advisory": "https://github.com/advisories/GHSA-vfj7-8cjw-p6xm",
+      "versions": ["3.0.3"],
+      "dependents": ["micromatch@npm:4.0.8"]
+    },
+    {
+      "package": "domexception",
+      "severity": "moderate",
+      "issue": "Use your platform's native DOMException instead",
+      "advisory": null,
+      "versions": ["4.0.0"],
+      "dependents": ["jsdom"]
+    },
+    {
+      "package": "glob",
+      "severity": "moderate",
+      "issue": "Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me",
+      "advisory": null,
+      "versions": ["7.2.3"],
+      "dependents": ["@jest/reporters"]
+    },
+    {
+      "package": "inflight",
+      "severity": "moderate",
+      "issue": "This module is not supported, and leaks memory. Do not use it. Check out lru-cache if you want a good and tested way to coalesce async requests by a key value, which is much more comprehensive and powerful.",
+      "advisory": null,
+      "versions": ["1.0.6"],
+      "dependents": ["glob@npm:7.2.3"]
+    },
+    {
+      "package": "node-forge",
+      "severity": "high",
+      "issue": "node-forge RSA PKCS#1 v1.5 signature verification accepts extra nested DigestAlgorithm elements",
+      "advisory": "https://github.com/advisories/GHSA-86w9-cpqp-85rv",
+      "versions": ["1.4.0"],
+      "dependents": ["@expo/code-signing-certificates@npm:0.0.6"]
+    },
+    {
+      "package": "sprintf-js",
+      "severity": "moderate",
+      "issue": "sprintf-js vulnerable to denial of service through unbounded precision specifiers",
+      "advisory": "https://github.com/advisories/GHSA-hp3w-g68c-fv3c",
+      "versions": ["1.0.3"],
+      "dependents": ["argparse@npm:1.0.10"]
+    },
+    {
+      "package": "uuid",
+      "severity": "moderate",
+      "issue": "uuid: Missing buffer bounds check in v3/v5/v6 when buf is provided",
+      "advisory": "https://github.com/advisories/GHSA-w5hq-g745-h8pq",
+      "versions": ["7.0.3"],
+      "dependents": ["xcode@npm:3.0.1"]
+    },
+    {
+      "package": "whatwg-encoding",
+      "severity": "moderate",
+      "issue": "Use @exodus/bytes instead for a more spec-conformant and faster implementation",
+      "advisory": null,
+      "versions": ["2.0.0"],
+      "dependents": ["jsdom"]
+    }
+  ]
+}

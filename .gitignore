@@ -75,3 +75,7 @@ coverage/**/*
 /ios/
 /android/
 /dist/
+
+# Python smoke-check bytecode.
+__pycache__/
+*.pyc

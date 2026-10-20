@@ -28,11 +28,24 @@ export interface ChoiceItemProps {
   title: string;
   selected: boolean;
   onSelect: () => void;
+  multiple?: boolean;
+  disabled?: boolean;
 }
-export function ChoiceItem({ title, selected, onSelect }: ChoiceItemProps) {
+export function ChoiceItem({
+  title,
+  selected,
+  onSelect,
+  multiple = false,
+  disabled = false,
+}: ChoiceItemProps) {
   return (
     <TouchableOpacity
-      onPress={() => onSelect()}
+      onPress={() => {
+        if (!disabled) onSelect();
+      }}
+      disabled={disabled}
+      accessibilityRole={multiple ? "checkbox" : "radio"}
+      accessibilityState={{ checked: selected, disabled }}
       style={[
         styles.item,
         { backgroundColor: selected ? "#b3995d" : "#F9F6EF" },
@@ -231,6 +244,7 @@ const ChoicesQuestionScreen: React.ElementType<ChoicesQuestionScreenProps> = ({
         data={flatListData}
         renderItem={({ item, index }) => (
           <ChoiceItem
+            multiple={answerType === ChoicesAnswerType.MULTIPLE_SELECTION}
             id={item.id}
             title={item.title}
             selected={(selected[index] && selected[index][1]) || false}

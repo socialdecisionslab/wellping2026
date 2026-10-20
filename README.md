@@ -6,7 +6,7 @@
 
 # Well Ping
 
-[![CI](https://github.com/wellping/wellping/actions/workflows/jest.yml/badge.svg)](https://github.com/wellping/wellping/actions/workflows/jest.yml) [![runs with expo](https://img.shields.io/badge/Runs%20with%20Expo-000.svg?style=flat-square&logo=EXPO&labelColor=f3f3f3&logoColor=000)](https://expo.dev/)
+[![CI](https://github.com/socialdecisionslab/wellping2026/actions/workflows/jest.yml/badge.svg)](https://github.com/socialdecisionslab/wellping2026/actions/workflows/jest.yml) [![runs with expo](https://img.shields.io/badge/Runs%20with%20Expo-000.svg?style=flat-square&logo=EXPO&labelColor=f3f3f3&logoColor=000)](https://expo.dev/)
 
 A React Native survey app that pings you once a while to answer questions!
 
@@ -27,6 +27,8 @@ A React Native survey app that pings you once a while to answer questions!
 - [WellPing EMA Parser](https://github.com/StanfordSocialNeuroscienceLab/wellping-ema-parser)
 
 ## Development
+
+The canonical repository is [socialdecisionslab/wellping2026](https://github.com/socialdecisionslab/wellping2026). As of October 20, 2026, `main` remains the older baseline. The `codex/consolidate-mobile-candidate` branch combines the mobile foundation, participant experience, lifecycle recovery, and PR #13 release safeguards for review. See the [current app assessment and next steps](docs/modernization/integrated-candidate-2026-10-20.md) for source commits, validation, and release gates. CI badges are not participant-release approval.
 
 The modernization candidate uses Expo **57.0.30**, React Native **0.86.3**, Node **22.23.3**, and Corepack-pinned Yarn **4.18.1**.
 

@@ -148,7 +148,7 @@ test.each([
         loadingCompleted={mockLoadingCompleted}
         onDataChange={mockOnDataChangeFn}
         allAnswers={{
-          // @ts-ignore (we don't need to craft an entire Answer)
+          // @ts-expect-error Synthetic partial answer tests the component boundary.
           [question.defaultValueFromQuestionId]: {
             data: prevAnswerData,
           },

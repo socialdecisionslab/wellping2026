@@ -12,7 +12,6 @@ import { View, Text, TextInput, Alert, Platform } from "react-native";
 
 import { getReusableChoicesIncludeErrorAsync } from "../helpers/studyFile";
 import { QuestionScreenProps } from "../helpers/types";
-// @ts-ignore
 import SearchableDropdown from "../inc/react-native-searchable-dropdown";
 
 interface MultipleTextQuestionScreenProps extends QuestionScreenProps {
@@ -134,7 +133,6 @@ const MultipleTextQuestionScreen: React.ElementType<
     textFieldsRef.current.push(null);
 
     textFields.push(
-      // @ts-ignore
       <SearchableDropdown
         key={index}
         onItemSelect={(item: DropdownItem) => {

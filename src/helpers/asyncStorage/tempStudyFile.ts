@@ -9,16 +9,22 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { logAndThrowError } from "../debug";
+import { withOpenDataSessionAsync } from "../dataJournal";
 import { getASKeyAsync } from "./asyncStorage";
 
 const TEMP_STUDY_FILE = `tempStudyFile`;
 
-export async function storeTempStudyFileAsync(responseString: string) {
+export async function storeTempStudyFileAsync(
+  responseString: string,
+  expectedOwnerId: string,
+) {
   try {
-    await AsyncStorage.setItem(
-      await getASKeyAsync(TEMP_STUDY_FILE),
-      responseString,
-    );
+    await withOpenDataSessionAsync(expectedOwnerId, async () => {
+      await AsyncStorage.setItem(
+        await getASKeyAsync(TEMP_STUDY_FILE),
+        responseString,
+      );
+    });
   } catch (error) {
     logAndThrowError(error);
   }

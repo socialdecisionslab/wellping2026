@@ -138,7 +138,9 @@ const DashboardComponent: React.FunctionComponent<DashboardComponentProps> = ({
   }
 
   return (
-    <View style={{ flex: 1, marginTop: 20, marginHorizontal: 20 }}>
+    <View
+      style={{ flex: 1, minHeight: 320, marginTop: 20, marginHorizontal: 20 }}
+    >
       {url ? (
         <WebView
           source={{ uri: url }}

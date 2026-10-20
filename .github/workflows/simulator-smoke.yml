@@ -1,41 +1,32 @@
 name: iPhone simulator smoke test
 on:
-  workflow_run:
-    workflows: ["Native test builds"]
-    types: [completed]
-  workflow_dispatch:
+  workflow_call:
     inputs:
-      native_run_id:
-        description: "Successful native build run for the exact selected commit"
+      reviewed-sha:
         required: true
         type: string
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
 permissions:
   contents: read
-  actions: read
 jobs:
   launch:
-    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_repository.full_name == github.repository)
     runs-on: macos-26
-    timeout-minutes: 60
+    timeout-minutes: 30
     env:
+      REVIEWED_SHA: ${{ inputs.reviewed-sha }}
       DEVELOPER_DIR: /Applications/Xcode_26.4.1.app/Contents/Developer
-      GH_TOKEN: ${{ github.token }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
           persist-credentials: false
-      - name: Download verified native build for this exact commit
-        env:
-          WP_RUN: ${{ github.event.workflow_run.id || inputs.native_run_id }}
-          WP_EXPECTED_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+          ref: ${{ inputs.reviewed-sha }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: Well-Ping-Local-iOS-Simulator
+          path: preview
+      - name: Verify same-run artifact and exact source
+        run: bash scripts/native/build-identity.sh verify preview
+      - name: Unpack simulator app
         run: |
-          gh run view "$WP_RUN" --json headSha,conclusion,url,workflowName > tested-build.json
-          jq -e --arg sha "$WP_EXPECTED_SHA" '.headSha == $sha and .conclusion == "success" and .workflowName == "Native test builds"' tested-build.json
-          gh run download "$WP_RUN" -n Well-Ping-Local-iOS-Simulator -D preview
           mkdir -p build/ios/Build/Products/Release-iphonesimulator
           unzip -q preview/Well-Ping-Local-Simulator.zip -d build/ios/Build/Products/Release-iphonesimulator
       - name: Launch and reopen in iPhone simulator
@@ -45,7 +36,7 @@ jobs:
         with:
           name: iPhone-simulator-test-evidence
           path: |
-            tested-build.json
+            preview/tested-build.json
             ios-first-launch.png
             ios-reopen.png
             simulator-processes.txt

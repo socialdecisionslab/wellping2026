@@ -11,6 +11,8 @@ function load(file, mocks = {}) {
     {
       compilerOptions: {
         module: ts.ModuleKind.CommonJS,
+        // VM mocks explicitly expose default exports; keep this contract across TS versions.
+        esModuleInterop: false,
         jsx: ts.JsxEmit.React,
       },
     },
