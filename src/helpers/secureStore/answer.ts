@@ -1,3 +1,5 @@
+import { withDataLock } from "../dataLock";
+import { markPingDirtyAsync } from "../uploadRevisions";
 import { Answer } from "@wellping/study-schemas/lib/answerTypes";
 import { AnswerSchema } from "@wellping/study-schemas/lib/schemas/Answer";
 import { PingId, QuestionId } from "@wellping/study-schemas/lib/types";
@@ -13,15 +15,20 @@ const getKey = (pingId: PingId, questionId: QuestionId) =>
   `${ANSWER_PREFIX}${pingId}.${questionId}`;
 
 export async function secureStoreAnswerAsync(answer: Answer) {
-  try {
-    await SecureStore.setItemAsync(
-      await getSSKeyAsync(getKey(answer.pingId, answer.questionId)),
-      JSON.stringify(answer),
-    );
-    await addToAnswersQuestionIdsListForPingIfNeededAsync(answer);
-  } catch (error) {
-    logAndThrowError(error);
-  }
+  return withDataLock(async () => {
+    try {
+      await markPingDirtyAsync(answer.pingId);
+      // Index first: an interruption may leave a detectable incomplete record,
+      // but must never orphan a durable answer and silently omit it from upload.
+      await addToAnswersQuestionIdsListForPingIfNeededAsync(answer);
+      await SecureStore.setItemAsync(
+        await getSSKeyAsync(getKey(answer.pingId, answer.questionId)),
+        JSON.stringify(answer),
+      );
+    } catch (error) {
+      logAndThrowError(error);
+    }
+  });
 }
 
 export async function secureGetAnswerAsync(

@@ -1,3 +1,5 @@
+import { RELEASE } from "./config/release";
+import { Text } from "react-native";
 import "./src/helpers/global";
 
 import { StatusBar } from "expo-status-bar";
@@ -12,11 +14,18 @@ import RootScreen from "./src/RootScreen";
 export default function App() {
   return (
     <SafeAreaProvider>
-    <SafeAreaView style={{ flex: 1 }}>
-      <RootScreen />
-      {/* eslint-disable-next-line react/style-prop-object */}
-      <StatusBar style="dark" />
-    </SafeAreaView>
+      <SafeAreaView style={{ flex: 1 }}>
+        {!__DEV__ && !RELEASE ? (
+          <Text>
+            This build is not ready for enrollment. Contact study staff for the
+            signed study app.
+          </Text>
+        ) : (
+          <RootScreen />
+        )}
+        {/* eslint-disable-next-line react/style-prop-object */}
+        <StatusBar style="dark" />
+      </SafeAreaView>
     </SafeAreaProvider>
   );
 }

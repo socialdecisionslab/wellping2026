@@ -28,7 +28,7 @@ test("local runner uses a separate entry, identifiers, and no OTA or deep links"
     expect(local.android.package).not.toBe(production.android.package);
     expect(local.ios.associatedDomains).toEqual([]);
     expect(local.android.intentFilters).toEqual([]);
-    expect(production.updates.enabled).toBe(true);
+    expect(production.updates.enabled).toBe(false);
   } finally {
     if (previous === undefined) delete process.env.WELLPING_LOCAL_ONLY;
     else process.env.WELLPING_LOCAL_ONLY = previous;

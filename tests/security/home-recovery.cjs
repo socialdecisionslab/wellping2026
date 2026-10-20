@@ -43,8 +43,8 @@ function load(file) {
         },
       },
     },
-    "./helpers/asyncStorage/pingState": {
-      async getPingStateAsync() {
+    "./helpers/recoverSurvey": {
+      async recoverSurveyAsync() {
         resumeReads++;
         if (resumeFails) throw Error("SYNTHETIC_SECRET");
         return state;
@@ -54,6 +54,9 @@ function load(file) {
       HOME_SCREEN_DEBUG_VIEW_SYMBOLS: { UPLOAD: { INITIAL: "" } },
     },
     "./helpers/styles": { styles: {} },
+    "./helpers/asyncStorage/unuploadedPingsList": {
+      getUnuploadedPingsListAsync: async () => [],
+    },
     "./helpers/dataUpload": {
       async uploadDataAsync() {
         if (uploadFails) throw Error("SYNTHETIC_SECRET");

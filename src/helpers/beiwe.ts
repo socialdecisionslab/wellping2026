@@ -1,3 +1,5 @@
+import { RELEASE } from "../../config/release";
+import { postBeiweV1Async, uploadBeiweV1Async } from "./beiweV1";
 /**
  * Unless otherwise noted, precondition for every function in the file is:
  * `isUsingBeiwe(studyInfo) === true`.
@@ -21,6 +23,19 @@ import { getStudyInfoAsync } from "./studyFile";
  * If error, throws error message.
  */
 export async function beiweLoginAsync(user: User): Promise<void> {
+  if (RELEASE) {
+    const result = await postBeiweV1Async("enroll", user, {
+      device_os: Device.osName,
+      os_version: Device.osVersion,
+    });
+    if (
+      !result ||
+      result.protocol !== "wellping-v1" ||
+      result.enrolled !== true
+    )
+      throw new Error("Unable to enroll. Contact study staff.");
+    return;
+  }
   const request: { [key: string]: any } = {
     new_password: user.password, // Do not reset password
     phone_number: "1234567890", // Doesn't matter
@@ -64,6 +79,11 @@ export async function beiweUploadDataForUserAsync(
   startUploading();
 
   try {
+    if (RELEASE) {
+      const response = await uploadBeiweV1Async(data, user);
+      endUploading();
+      return response;
+    }
     const endpoint = "/ssnl_upload";
     const response = await makePostRequestAsync({
       endpoint,

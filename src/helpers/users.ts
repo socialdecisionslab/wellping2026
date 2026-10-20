@@ -1,3 +1,4 @@
+import { beginSessionTeardown, finishSessionTeardown } from "./uploadActivity";
 import { StudyInfo } from "@wellping/study-schemas/lib/types";
 import * as Notifications from "expo-notifications";
 
@@ -39,6 +40,15 @@ export async function loginAsync(user: User, studyInfo: StudyInfo) {
 }
 
 export async function logoutAsync() {
+  beginSessionTeardown();
+  try {
+    await performLogoutAsync();
+  } finally {
+    finishSessionTeardown();
+  }
+}
+
+async function performLogoutAsync() {
   // Check before authentication teardown or any deletion. Fail closed if reads fail.
   if (await studyFileExistsAsync()) {
     const unuploaded = await getUnuploadedPingsListAsync();

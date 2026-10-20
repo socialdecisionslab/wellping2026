@@ -1,3 +1,4 @@
+import { storePingStateAsync } from "./helpers/asyncStorage/pingState";
 import {
   Ping,
   StreamName,
@@ -17,6 +18,7 @@ import {
   Alert,
   AppState,
   AppStateStatus,
+  Platform,
   Button,
   Text,
   View,
@@ -25,13 +27,9 @@ import DashboardComponent from "./components/DashboardComponent";
 import { getAnswersPingIdsQuestionIdsListAsync } from "./helpers/asyncStorage/answersPingIdsQuestionIdsList";
 import { dequeueFuturePingIfAny } from "./helpers/asyncStorage/futurePings";
 import { getPingsListAsync } from "./helpers/asyncStorage/pingsList";
-import { getPingStateAsync } from "./helpers/asyncStorage/pingState";
-import {
-  addToUnuploadedPingsListIfNeededAsync,
-  getUnuploadedPingsListAsync,
-  removeFromUnuploadedPingsListAsync,
-} from "./helpers/asyncStorage/unuploadedPingsList";
-import { getUnuploadedDataAsync, uploadDataAsync } from "./helpers/dataUpload";
+import { recoverSurveyAsync } from "./helpers/recoverSurvey";
+import { getUnuploadedPingsListAsync } from "./helpers/asyncStorage/unuploadedPingsList";
+import { uploadDataAsync } from "./helpers/dataUpload";
 import {
   alertWithShareButtonContainingDebugInfoAsync,
   getNonCriticalProblemTextForUser,
@@ -89,6 +87,7 @@ interface HomeScreenState {
   firebaseUser: FirebaseUser | null;
 
   resumeError: boolean;
+  syncStatus: "checking" | "pending" | "uploading" | "uploaded";
 }
 
 export default class HomeScreen extends React.Component<
@@ -108,6 +107,7 @@ export default class HomeScreen extends React.Component<
       currentPing: null,
       isLoading: true,
       resumeError: false,
+      syncStatus: "checking",
       storedPingStateAsync: null,
       uploadStatusSymbol: HOME_SCREEN_DEBUG_VIEW_SYMBOLS.UPLOAD.INITIAL,
       firebaseUser: null,
@@ -143,19 +143,40 @@ export default class HomeScreen extends React.Component<
       nextAppState === "active"
     ) {
       // App has come to the foreground.
-      this.checkIfPingHasExpiredAsync();
+      void this.refreshOnForegroundAsync();
     }
     this.setState({ appState: nextAppState });
   };
 
-  notificationResponseReceivedListener: ReturnType<typeof Notifications.addNotificationResponseReceivedListener> | null = null;
-  appStateSubscription: ReturnType<typeof AppState.addEventListener> | null = null;
+  async refreshOnForegroundAsync() {
+    try {
+      const permission = await Notifications.getPermissionsAsync();
+      const allowed =
+        Platform.OS === "ios"
+          ? !!permission.ios?.allowsAlert
+          : permission.granted;
+      if (allowed && !this.state.allowsNotifications)
+        await setNotificationsAsync();
+      this.setState({ allowsNotifications: allowed });
+      await this.checkIfPingHasExpiredAsync();
+    } catch (_) {
+      this.setState({ allowsNotifications: false });
+    } finally {
+      await this._uploadUnuploadedDataAndRemoveFromThemIfSuccessfulAsync();
+    }
+  }
+
+  notificationResponseReceivedListener: ReturnType<
+    typeof Notifications.addNotificationResponseReceivedListener
+  > | null = null;
+  appStateSubscription: ReturnType<typeof AppState.addEventListener> | null =
+    null;
   unregisterAuthObserver: FirebaseUnsubscribe | null = null;
   async restorePingAsync(ping: Ping) {
     try {
       const storedPingStateAsync = ping.endTime
         ? null
-        : await getPingStateAsync(ping.id);
+        : await recoverSurveyAsync(ping.id);
       this.setState({
         storedPingStateAsync,
         currentPing: ping,
@@ -188,7 +209,10 @@ export default class HomeScreen extends React.Component<
         await this.checkIfPingHasExpiredAsync();
       });
 
-    this.appStateSubscription = AppState.addEventListener("change", this._handleAppStateChange);
+    this.appStateSubscription = AppState.addEventListener(
+      "change",
+      this._handleAppStateChange,
+    );
 
     const latestPing = await getLatestPingAsync();
     //console.warn(latestStartedPing);
@@ -255,6 +279,7 @@ export default class HomeScreen extends React.Component<
     }
 
     this.setState({ isLoading: false });
+    void this._uploadUnuploadedDataAndRemoveFromThemIfSuccessfulAsync();
 
     if (studyInfo.specialAlertOnLaunch) {
       Alert.alert(
@@ -284,7 +309,24 @@ export default class HomeScreen extends React.Component<
     }
   }
 
+  private startingSurvey = false;
   async startSurveyAsync() {
+    if (this.startingSurvey) return;
+    this.startingSurvey = true;
+    try {
+      await this.startSurveyOnceAsync();
+    } catch (_) {
+      Alert.alert(
+        "Survey could not start",
+        "Your saved data has been preserved. Please restart or contact study staff.",
+      );
+    } finally {
+      this.startingSurvey = false;
+      this.setState({ isLoading: false });
+    }
+  }
+
+  private async startSurveyOnceAsync() {
     await new Promise<void>((resolve) =>
       this.setState({ isLoading: true }, resolve),
     );
@@ -348,36 +390,34 @@ export default class HomeScreen extends React.Component<
     doAfterErrorAsync?: (error: any) => Promise<void>;
     doFinally?: () => void;
   } = {}) {
-    const { studyInfo } = this.props;
-    // We need to store `prevUnuploaded` beforehand because unuploaded pings list
-    // might be changed during we are doing `uploadDataAsync`. And we don't want
-    // to remove the newly added pings that we haven't uploaded.
-    const prevUnuploaded = await getUnuploadedPingsListAsync();
-    const prevData = await getUnuploadedDataAsync();
-    uploadDataAsync(studyInfo, this.setUploadStatusSymbol, {
-      unuploadedOnly: true,
-      // We do this to avoid the data being modified before being uploaded.
-      prefetchedData: prevData,
-    })
-      .then(async (response) => {
-        // We have to use `.then` here because we don't want to block.
-        await removeFromUnuploadedPingsListAsync(prevUnuploaded);
-        await doAfterResponseAsync(response);
-      })
-      .catch(async (e) => {
-        // There's some error in uploading.
-        // Do nothing (keep the unuploaded pings list unmodified).
-
-        await doAfterErrorAsync(e);
-      })
-      .finally(() => {
-        doFinally();
+    try {
+      if ((await getUnuploadedPingsListAsync()).length === 0) {
+        this.setState({ syncStatus: "uploaded" });
+        return;
+      }
+      this.setState({ syncStatus: "uploading" });
+      const response = await uploadDataAsync(
+        this.props.studyInfo,
+        this.setUploadStatusSymbol,
+        { unuploadedOnly: true },
+      );
+      this.setState({
+        syncStatus: (await getUnuploadedPingsListAsync()).length
+          ? "pending"
+          : "uploaded",
       });
+      await doAfterResponseAsync(response);
+    } catch (error) {
+      this.setState({ syncStatus: "pending" });
+      await doAfterErrorAsync(error);
+    } finally {
+      doFinally();
+    }
   }
 
   async _startSurveyTypeAsync(streamName: StreamName) {
     // Upload and clear old unuploaded pings.
-    await this._uploadUnuploadedDataAndRemoveFromThemIfSuccessfulAsync();
+    void this._uploadUnuploadedDataAndRemoveFromThemIfSuccessfulAsync();
 
     // Create new ping.
     const { currentNotificationTime } = this.state;
@@ -387,11 +427,20 @@ export default class HomeScreen extends React.Component<
       streamName,
     });
 
-    // Add this ping to unuploaded pings list.
-    await addToUnuploadedPingsListIfNeededAsync(newPing);
+    // Commit a resumable first screen before mounting the questionnaire.
+    await storePingStateAsync(newPing.id, {
+      currentQuestionData: {
+        questionId: this.props.studyInfo.streamsStartingQuestionIds[streamName],
+        extraData: {},
+      },
+      nextQuestionsDataStack: [],
+      answers: {},
+      isInTransition: false,
+    });
 
     this.setState({
       currentPing: newPing,
+      syncStatus: "pending",
       storedPingStateAsync: null,
     });
   }
@@ -401,12 +450,19 @@ export default class HomeScreen extends React.Component<
   };
 
   async _forceUploadAllDataAsync() {
+    this.setState({ syncStatus: "uploading" });
     try {
       await uploadDataAsync(this.props.studyInfo, this.setUploadStatusSymbol, {
         unuploadedOnly: false,
       });
+      this.setState({
+        syncStatus: (await getUnuploadedPingsListAsync()).length
+          ? "pending"
+          : "uploaded",
+      });
       Alert.alert("Data uploaded", "Your data was uploaded successfully.");
     } catch (_) {
+      this.setState({ syncStatus: "pending" });
       Alert.alert(
         "Upload failed",
         "Your data remains on this device. Please try again or contact study staff.",
@@ -450,6 +506,25 @@ export default class HomeScreen extends React.Component<
     // Diagnostics and data-export controls are intentionally absent from the app.
     const ExtraView = (
       <View>
+        <Text accessibilityLiveRegion="polite">
+          {currentPing && !currentPing.endTime
+            ? "Survey in progress."
+            : this.state.syncStatus === "uploading"
+            ? "Saved on device. Uploading…"
+            : this.state.syncStatus === "pending"
+            ? "Saved on device. Upload pending."
+            : this.state.syncStatus === "uploaded"
+            ? "Saved responses uploaded."
+            : "Checking saved responses…"}
+        </Text>
+        {this.state.syncStatus === "pending" && (
+          <Button
+            title="Retry upload"
+            onPress={() => {
+              void this._uploadUnuploadedDataAndRemoveFromThemIfSuccessfulAsync();
+            }}
+          />
+        )}
         {!allowsNotifications && (
           <Text>
             Please allow notifications if you would like study reminders.
@@ -598,7 +673,8 @@ export default class HomeScreen extends React.Component<
                 Thank you for completing the survey for this ping!{"\n"}
                 Well Ping will send a notification for the next survey soon!
                 {"\n"}
-                Please close the app entirely.
+                Your responses are saved on this device. Check the upload status
+                above before closing.
               </Text>
               <DashboardComponent
                 firebaseUser={firebaseUser}
@@ -623,6 +699,7 @@ export default class HomeScreen extends React.Component<
           onFinish={(finishedPing) => {
             this.setState({
               currentPing: finishedPing,
+              syncStatus: "pending",
               afterFinishingPing_isUploading: true,
             });
             // TODO: Maybe also use NetInfo.fetch() before to make sure don't stuck on this page. But that's probably unnecessary.

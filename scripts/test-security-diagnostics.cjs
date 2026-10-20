@@ -82,6 +82,10 @@ function load(file, mocks) {
   }
   let dequeued = false;
   const upload = load("src/helpers/dataUpload.ts", {
+    "expo-crypto": {},
+    "./dataLock": {},
+    "./uploadActivity": { beginUpload() {}, finishUpload() {} },
+    "./uploadRevisions": {},
     "./answers": {},
     "./asyncStorage/unuploadedPingsList": {
       removeFromUnuploadedPingsListAsync: async () => {

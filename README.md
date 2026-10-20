@@ -48,4 +48,4 @@ rebuild a Git dependency. See [artifact provenance](./vendor/README.md).
 
 ## Deployment
 
-This candidate has not been released. Lab account ownership, signing, backend configuration and device validation must be completed before participant distribution.
+This candidate has not been released. Follow the [December release runbook](./docs/release/deployment.md) and [proposed Beiwe integration contract](./docs/release/beiwe-contract.md). Client reliability changes are implemented and release builds require explicit lab configuration and backend contract approval. Hosting, server implementation, signing, physical-device evidence, and the authorized pilot remain release gates.

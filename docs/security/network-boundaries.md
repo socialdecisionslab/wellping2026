@@ -1,5 +1,7 @@
 # Network credential mitigation and remaining release gates
 
+Release update: configured staging/production builds use the proposed body-authenticated [Beiwe v1 contract](../release/beiwe-contract.md), exact configured study URLs, a 20-second request/body deadline, and verified upload receipts. Legacy query transport described below remains available only through the unconfigured development path; unconfigured non-development builds block enrollment. Server implementation/approval and native redirect evidence remain required.
+
 This patch removes credential interpolation from the embedded dashboard. Templates containing password hashes, Firebase ID tokens, or login-session IDs fail closed with a safe user message. Recognizable literal credential query keys are rejected too; arbitrary pre-embedded secrets cannot be detected reliably and must never be configured. Remaining identifier placeholders are URI-encoded. Dashboard initial URLs must use HTTPS without userinfo; WebView navigation requests are limited to the initial origin, and mixed content/file access are disabled.
 
 This navigation restriction is not a subresource firewall: trusted dashboard HTML may still request other HTTPS resources. Review and control dashboard content, server CSP, and response headers before production use. Validate navigation/redirect behavior on actual Android and iOS builds. The synthetic checks do not emulate WebView.

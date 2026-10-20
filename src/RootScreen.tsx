@@ -1,3 +1,5 @@
+import { getCurrentNotificationTimeAsync } from "./helpers/notifications";
+import { getLatestPingAsync } from "./helpers/pings";
 import { StudyFile } from "@wellping/study-schemas/lib/types";
 import React from "react";
 import { Text } from "react-native";
@@ -126,15 +128,33 @@ export default class RootScreen extends React.Component<
     if (tempStudyFile === null) {
       return true;
     }
-    // We have to `clearTempStudyFileAsync` before `parseStudyFileAsync`
-    // because if the new study info is invalid, `parseStudyFileAsync` clears
-    // study info which `clearTempStudyFileAsync` needs.
-    await clearTempStudyFileAsync();
+    // A resumed survey must continue on the instrument it started with.
+    // Keep the staged update until a later launch after completion.
+    const latestPing = await getLatestPingAsync();
+    if (latestPing && !latestPing.endTime) {
+      const activeWindow = await getCurrentNotificationTimeAsync();
+      if (activeWindow?.getTime() === latestPing.notificationTime.getTime())
+        return true;
+    }
     const results = await this.parseStudyFileAsync(tempStudyFile);
+    // Consume rejected candidates too, so the next launch can use the last valid study.
+    await clearTempStudyFileAsync();
     return results;
   }
 
   async componentDidMount() {
+    try {
+      await this.loadInitialStudyAsync();
+    } catch (_) {
+      this.setState({
+        isLoading: false,
+        studyFileErrorText:
+          "Saved study data could not be loaded. Data has been preserved. Please restart or contact study staff.",
+      });
+    }
+  }
+
+  async loadInitialStudyAsync() {
     if (await studyFileExistsAsync()) {
       if (!(await this.loadTempStudyFileAsync())) {
         return;

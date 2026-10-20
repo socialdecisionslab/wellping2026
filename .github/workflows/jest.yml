@@ -26,3 +26,5 @@ jobs:
         run: corepack yarn test:ci
       - name: Compile isolated iOS and Android bundles
         run: corepack yarn smoke:local
+      - name: Compile participant iOS and Android bundles with synthetic staging config
+        run: corepack yarn smoke:release

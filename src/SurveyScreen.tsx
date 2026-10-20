@@ -1,3 +1,4 @@
+import { SerialTasks } from "./helpers/serialTasks";
 import {
   Answer,
   AnswerData,
@@ -182,6 +183,59 @@ export default class SurveyScreen extends React.Component<
   }
 
   private savingResume = false;
+  private answerTasks = new SerialTasks();
+  private navigationRequested = false;
+  private saveAlertVisible = false;
+
+  private showAnswerSaveError(retry: () => Promise<void>) {
+    if (this.saveAlertVisible) return;
+    this.saveAlertVisible = true;
+    Alert.alert(
+      "Answer not saved",
+      "Your answer could not be saved. Retry before continuing or closing the app.",
+      [
+        {
+          text: "Retry",
+          onPress: () => {
+            this.saveAlertVisible = false;
+            void retry().catch(() => this.showAnswerSaveError(retry));
+          },
+        },
+      ],
+      { cancelable: false },
+    );
+  }
+
+  async submitAnswer(question: Question, action: "next" | "skip" | "pna") {
+    if (
+      this.navigationRequested ||
+      this.savingResume ||
+      this.state.currentQuestionData.questionId !== question.id
+    )
+      return;
+    this.navigationRequested = true;
+    try {
+      await this.answerTasks.flush();
+      if (action !== "next") {
+        await this.addAnswerToAnswersListAsync(
+          question,
+          action === "pna" ? { preferNotToAnswer: true } : { data: null },
+        );
+      } else if (!this.state.answers[this.getRealQuestionId(question)]) {
+        await this.addAnswerToAnswersListAsync(question, { data: null });
+      } else if (
+        this.dataValidationFunction &&
+        !this.dataValidationFunction()
+      ) {
+        return;
+      }
+      this.onNextSelect();
+    } catch (_) {
+      this.showAnswerSaveError(() => this.submitAnswer(question, action));
+    } finally {
+      this.navigationRequested = false;
+    }
+  }
 
   private async persistResume(afterSave?: () => Promise<void> | void) {
     this.savingResume = true;
@@ -638,6 +692,7 @@ export default class SurveyScreen extends React.Component<
    */
   onNextSelect() {
     if (this.savingResume) return;
+    this.savingResume = true;
     // Reset this so that the new `QuestionScreen` can set it.
     this.dataValidationFunction = null;
 
@@ -739,7 +794,7 @@ export default class SurveyScreen extends React.Component<
     );
   }
 
-  async addAnswerToAnswersListAsync(
+  addAnswerToAnswersListAsync(
     question: Question,
     {
       preferNotToAnswer = null,
@@ -752,26 +807,34 @@ export default class SurveyScreen extends React.Component<
     },
   ): Promise<void> {
     const realQuestionId = this.getRealQuestionId(question);
+    const capturedData =
+      data === null ? null : JSON.parse(JSON.stringify(data));
 
-    const answer = await insertAnswerAsync({
-      ping: this.props.ping,
-      question,
-      realQuestionId,
-      preferNotToAnswer,
-      data,
-      date,
-    });
+    return this.answerTasks.enqueue(async () => {
+      const answer = await insertAnswerAsync({
+        ping: this.props.ping,
+        question,
+        realQuestionId,
+        preferNotToAnswer,
+        data: capturedData,
+        date,
+      });
 
-    await new Promise<void>((resolve, reject) => {
-      this.setState(
-        (prevState) => ({
-          answers: {
-            ...prevState.answers,
-            [realQuestionId]: answer,
-          },
-        }),
-        () => resolve(),
-      );
+      await new Promise<void>((resolve, reject) => {
+        this.setState(
+          (prevState) => ({
+            answers: {
+              ...prevState.answers,
+              [realQuestionId]: answer,
+            },
+          }),
+          () => resolve(),
+        );
+      });
+      await storePingStateAsync(this.props.ping.id, {
+        ...this.state,
+        isInTransition: false,
+      });
     });
   }
 
@@ -968,9 +1031,16 @@ export default class SurveyScreen extends React.Component<
                   this.setState({ isInTransition: false });
                 }}
                 onDataChange={(data) => {
-                  this.addAnswerToAnswersListAsync(question, {
+                  if (
+                    this.navigationRequested ||
+                    this.state.currentQuestionData.questionId !== question.id
+                  )
+                    return;
+                  void this.addAnswerToAnswersListAsync(question, {
                     data,
-                  });
+                  }).catch(() =>
+                    this.showAnswerSaveError(() => this.answerTasks.flush()),
+                  );
                 }}
                 allAnswers={answers}
                 allQuestions={questions}
@@ -990,12 +1060,8 @@ export default class SurveyScreen extends React.Component<
         </View>
         {question.extraCustomNextWithoutAnsweringButton && (
           <Button
-            onPress={async () => {
-              // Clicking this button is equivalent to clicking "Next" without answering.
-              await this.addAnswerToAnswersListAsync(question, {
-                data: null,
-              });
-              this.onNextSelect();
+            onPress={() => {
+              void this.submitAnswer(question, "skip");
             }}
             accessibilityLabel={question.extraCustomNextWithoutAnsweringButton}
             title={question.extraCustomNextWithoutAnsweringButton}
@@ -1010,32 +1076,16 @@ export default class SurveyScreen extends React.Component<
           }}
         >
           <Button
-            onPress={async () => {
-              await this.addAnswerToAnswersListAsync(question, {
-                preferNotToAnswer: true,
-              });
-              this.onNextSelect();
+            onPress={() => {
+              void this.submitAnswer(question, "pna");
             }}
             accessibilityLabel="Prefer not to answer the current question"
             title="Prefer not to answer"
           />
           <Button
             disabled={nextButtonIsDisabled()}
-            onPress={async () => {
-              if (answers[realQuestionId] == null) {
-                // The user clicks "Next" without answering.
-                await this.addAnswerToAnswersListAsync(question, {
-                  data: null,
-                });
-              } else {
-                if (
-                  this.dataValidationFunction &&
-                  !this.dataValidationFunction()
-                ) {
-                  return;
-                }
-              }
-              this.onNextSelect();
+            onPress={() => {
+              void this.submitAnswer(question, "next");
             }}
             accessibilityLabel="Next question"
             title="Next"

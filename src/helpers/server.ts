@@ -11,6 +11,8 @@ export type ServerType = "firebase" | "beiwe";
 // If the server returns `new_pings_count` and/or `new_answers_count`
 // then we could check them locally to see if the data is consistent.
 export type DataUploadServerResponse = {
+  protocol?: "wellping-v1";
+  receipt?: string;
   new_pings_count?: number;
   new_answers_count?: number;
   saved_to?: string;

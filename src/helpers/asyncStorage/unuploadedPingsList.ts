@@ -1,3 +1,4 @@
+import { clearUploadRevisionsAsync } from "../uploadRevisions";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ping } from "@wellping/study-schemas/lib/types";
 
@@ -32,6 +33,7 @@ export async function addToUnuploadedPingsListIfNeededAsync(ping: Ping) {
 export async function clearUnuploadedPingsListAsync() {
   try {
     await AsyncStorage.removeItem(await getASKeyAsync(UNUPLOADED_PINGS_LIST));
+    await clearUploadRevisionsAsync();
   } catch (error) {
     logAndThrowError(error);
   }

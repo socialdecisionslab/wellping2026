@@ -112,20 +112,47 @@ test("backend configuration rejection preserves the saved study", async () => {
   expect(await getStudyFileAsync()).toEqual(savedStudy);
 });
 
-test("a storage failure still clears a potentially partial replacement", async () => {
+test("a failed atomic replacement preserves the previous complete study", async () => {
   expect(await parseAndStoreStudyFileAsync(rawStudy)).toBeNull();
-  const setItem = (AsyncStorage.setItem as jest.Mock).getMockImplementation()!;
-  const write = jest
+  const previous = await getStudyFileAsync();
+  jest
     .spyOn(AsyncStorage, "setItem")
-    .mockClear()
-    .mockImplementationOnce(setItem)
     .mockRejectedValueOnce(new Error("Synthetic disk failure"));
-  jest.spyOn(console, "error").mockImplementation(() => {});
-  expect(await parseAndStoreStudyFileAsync(rawStudy)).toContain(
-    "Study configuration is invalid. Contact the study team.",
-  );
-  expect(write).toHaveBeenCalledTimes(2);
-  expect(await studyFileExistsAsync()).toBe(false);
+  expect(
+    await parseAndStoreStudyFileAsync(
+      JSON.stringify({
+        ...study,
+        studyInfo: { ...study.studyInfo, version: "replacement" },
+      }),
+    ),
+  ).not.toBeNull();
+  expect(await getStudyFileAsync()).toEqual(previous);
+  expect(await studyFileExistsAsync()).toBe(true);
+});
+
+test("a valid replacement commits all study sections together", async () => {
+  expect(await parseAndStoreStudyFileAsync(rawStudy)).toBeNull();
+  const replacement = {
+    ...study,
+    studyInfo: { ...study.studyInfo, version: "replacement" },
+  };
+  expect(
+    await parseAndStoreStudyFileAsync(JSON.stringify(replacement)),
+  ).toBeNull();
+  expect((await getStudyFileAsync()).studyInfo.version).toBe("replacement");
+});
+
+test("study identity changes preserve the existing enrollment namespace", async () => {
+  expect(await parseAndStoreStudyFileAsync(rawStudy)).toBeNull();
+  expect(
+    await parseAndStoreStudyFileAsync(
+      JSON.stringify({
+        ...study,
+        studyInfo: { ...study.studyInfo, id: "other-study" },
+      }),
+    ),
+  ).not.toBeNull();
+  expect((await getStudyFileAsync()).studyInfo.id).toBe(study.studyInfo.id);
 });
 
 afterEach(async () => {

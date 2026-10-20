@@ -1,9 +1,7 @@
+import { recoverSurveyAsync } from "../src/helpers/recoverSurvey";
 import { getLocalFixture, getLocalStream, Questionnaire } from "./fixtures";
 import { IS_LOCAL_DEVELOPMENT } from "../config/local";
-import {
-  getPingStateAsync,
-  storePingStateAsync,
-} from "../src/helpers/asyncStorage/pingState";
+import { storePingStateAsync } from "../src/helpers/asyncStorage/pingState";
 import { addToUnuploadedPingsListIfNeededAsync } from "../src/helpers/asyncStorage/unuploadedPingsList";
 import { getLatestPingAsync, insertPingAsync } from "../src/helpers/pings";
 import {
@@ -37,7 +35,7 @@ export async function openSyntheticSession(
   let ping = await getLatestPingAsync();
   let previousState = null;
   if (ping && !startAnother && ping.endTime === null) {
-    previousState = await getPingStateAsync(ping.id);
+    previousState = await recoverSurveyAsync(ping.id);
   }
   if (!ping || startAnother) {
     ping = await insertPingAsync({

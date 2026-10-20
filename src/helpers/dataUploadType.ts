@@ -1,3 +1,4 @@
+import type { UploadRevisions } from "./uploadRevisions";
 import { Answer } from "@wellping/study-schemas/lib/answerTypes";
 import { Ping } from "@wellping/study-schemas/lib/types";
 
@@ -11,6 +12,9 @@ export type UserData = {
 
 export interface UploadData {
   user: UserData;
+  studyId?: string;
+  revisions?: UploadRevisions;
+  receipt?: string;
 }
 export interface AllData extends UploadData {
   pings: Ping[];

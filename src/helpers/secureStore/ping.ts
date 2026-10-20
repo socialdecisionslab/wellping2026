@@ -1,3 +1,5 @@
+import { withDataLock } from "../dataLock";
+import { markPingDirtyAsync } from "../uploadRevisions";
 import { PingSchema } from "@wellping/study-schemas/lib/schemas/Ping";
 import { Ping, PingId } from "@wellping/study-schemas/lib/types";
 import { parseJSON } from "date-fns";
@@ -11,15 +13,18 @@ const PING_PREFIX = `ping.`;
 const getKey = (pingId: PingId) => `${PING_PREFIX}${pingId}`;
 
 export async function secureStorePingAsync(ping: Ping) {
-  try {
-    await SecureStore.setItemAsync(
-      await getSSKeyAsync(getKey(ping.id)),
-      JSON.stringify(ping),
-    );
-    await addToPingsListIfNeededAsync(ping);
-  } catch (error) {
-    logAndThrowError(error);
-  }
+  return withDataLock(async () => {
+    try {
+      await markPingDirtyAsync(ping.id);
+      await SecureStore.setItemAsync(
+        await getSSKeyAsync(getKey(ping.id)),
+        JSON.stringify(ping),
+      );
+      await addToPingsListIfNeededAsync(ping);
+    } catch (error) {
+      logAndThrowError(error);
+    }
+  });
 }
 
 export async function secureGetPingAsync(pingId: PingId): Promise<Ping | null> {

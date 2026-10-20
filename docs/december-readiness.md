@@ -1,5 +1,7 @@
 # First study: December 2026 readiness
 
+Implementation follow-up: use the [release runbook](release/deployment.md) for current client changes, required account/configuration inputs, verification, and go/no-go criteria. Beiwe is the selected backend; a new lab-owned deployment and approval of the proposed integration contract are still required.
+
 Target: first participant use on both iPhone and Android, starting sometime in December 2026. There is no existing deployed cohort to migrate. The repository's social-interaction questionnaire is the starting instrument, pending PI review; its development example dates, reminder schedule and bonus wording are not an approved study protocol.
 
 ## Implemented in this candidate

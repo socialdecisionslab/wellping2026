@@ -1,3 +1,4 @@
+import { RELEASE } from "../../config/release";
 import * as Linking from "expo-linking";
 import * as WebBrowser from "expo-web-browser";
 import React from "react";
@@ -66,6 +67,7 @@ export default class LoginScreen extends React.Component<
   }
 
   handleUrl(url: Linking.ParsedURL) {
+    if (RELEASE) return; // Pilot builds use typed codes, not historical domains.
     if (
       url.hostname === "stanfordsocialneurosciencelab.github.io" ||
       url.hostname === "wellping.github.io"
@@ -77,7 +79,16 @@ export default class LoginScreen extends React.Component<
       ) {
         const code = url.queryParams["code"];
         if (typeof code !== "string") return;
-        const loginCode = decodeURIComponent(code);
+        let loginCode: string;
+        try {
+          loginCode = decodeURIComponent(code);
+        } catch (_) {
+          Alert.alert(
+            "Invalid enrollment link",
+            "Please enter the code provided by study staff.",
+          );
+          return;
+        }
 
         this.setState({ formData: loginCode });
         Alert.alert(
@@ -99,7 +110,8 @@ export default class LoginScreen extends React.Component<
     this.handleUrl(Linking.parse(event.url));
   };
 
-  linkingSubscription: ReturnType<typeof Linking.addEventListener> | null = null;
+  linkingSubscription: ReturnType<typeof Linking.addEventListener> | null =
+    null;
 
   async componentDidMount() {
     // If LoginScreen is loaded, it means that the user haven't logged in yet.
@@ -110,7 +122,10 @@ export default class LoginScreen extends React.Component<
       this.handleUrl(await Linking.parseInitialURLAsync());
       firstTimeLoadingLoginScreen = false;
     }
-    this.linkingSubscription = Linking.addEventListener("url", this.listenToUrlWhenForegroundHandler);
+    this.linkingSubscription = Linking.addEventListener(
+      "url",
+      this.listenToUrlWhenForegroundHandler,
+    );
   }
 
   componentWillUnmount() {

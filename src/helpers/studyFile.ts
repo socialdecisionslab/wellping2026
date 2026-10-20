@@ -1,3 +1,5 @@
+import { RELEASE } from "../../config/release";
+import { requestTextAsync } from "./http";
 import { StudyFileSchema } from "@wellping/study-schemas/lib/schemas/StudyFile";
 import {
   StudyFile,
@@ -13,7 +15,7 @@ import * as Crypto from "expo-crypto";
 import { STUDY_FILE_URL_PREFIXES_WHITELIST } from "../../config/studyWhitelist";
 import {
   storeCurrentStudyFileAsync,
-  clearCurrentStudyFileAsync,
+  getCurrentStudyFileSnapshotAsync,
   getCurrentStudyInfoAsync,
   getCurrentStreamsAsync,
   getCurrentExtraDataAsync,
@@ -88,9 +90,11 @@ export async function downloadStudyFileAsync({
   getHttpsOrigin(url);
 
   if (
-    !STUDY_FILE_URL_PREFIXES_WHITELIST.some((whitelistPrefix) =>
-      url.startsWith(whitelistPrefix),
-    )
+    RELEASE
+      ? url !== RELEASE.studyUrl
+      : !STUDY_FILE_URL_PREFIXES_WHITELIST.some((whitelistPrefix) =>
+          url.startsWith(whitelistPrefix),
+        )
   ) {
     throw new Error(
       "This study file URL is not in the whitelist. Please refer to " +
@@ -111,6 +115,25 @@ export async function downloadStudyFileAsync({
       },
     ),
   );
+
+  if (RELEASE) {
+    const response = await requestTextAsync(url, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        protocol: "wellping-v1",
+        credentials: { username, passwordHash },
+      }),
+    });
+    if (response.status < 200 || response.status >= 300)
+      throw new Error(
+        "Unable to load study configuration. Check your enrollment details.",
+      );
+    return response.text;
+  }
 
   const queryObject: { [key: string]: string } = {
     username,
@@ -187,23 +210,25 @@ export async function downloadStudyFileAsync({
 export async function parseAndStoreStudyFileAsync(
   rawJsonString: string,
 ): Promise<string | null> {
-  let startedStoringStudyFile = false;
   try {
     const parsedStudy = StudyFileSchema.parse(JSON.parse(rawJsonString));
+    if (
+      RELEASE &&
+      (!parsedStudy.studyInfo.version?.trim() ||
+        parsedStudy.studyInfo.studyFileURL !== RELEASE.studyUrl ||
+        parsedStudy.studyInfo.server.beiwe?.serverUrl !== RELEASE.beiweUrl ||
+        isUsingFirebase(parsedStudy.studyInfo) ||
+        parsedStudy.studyInfo.contactEmail !== RELEASE.supportEmail)
+    ) {
+      throw new Error("Study configuration does not match this release.");
+    }
     if (isUsingFirebase(parsedStudy.studyInfo)) {
       validateAndInitializeFirebaseWithConfig(parsedStudy.studyInfo);
     }
-    startedStoringStudyFile = true;
     await storeCurrentStudyFileAsync(parsedStudy);
     return null;
   } catch (e) {
-    // An invalid download has not changed storage. Keep the last valid study
-    // and its storage namespace available after the error screen's restart.
-    // Once writes begin, retain the existing cleanup for partial writes.
-    if (startedStoringStudyFile) {
-      await clearCurrentStudyFileAsync();
-    }
-
+    // Failed validation or commit leaves the previous complete record intact.
     return "Study configuration is invalid. Contact the study team.";
   }
 }
@@ -270,11 +295,7 @@ export async function getExtraDataAsync(): Promise<ExtraData> {
  * Throws an error if there isn't any current study file stored.
  */
 export async function getStudyFileAsync(): Promise<StudyFile> {
-  const studyInfo = await getStudyInfoAsync();
-  const streams = await getStreamsAsync();
-  const extraData = await getExtraDataAsync();
-
-  return { studyInfo, streams, extraData };
+  return getCurrentStudyFileSnapshotAsync();
 }
 
 /**

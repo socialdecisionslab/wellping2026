@@ -168,6 +168,10 @@ const state = {
     deleted = 0,
     auth = 0;
   const users = load("src/helpers/users.ts", {
+    "./uploadActivity": {
+      beginSessionTeardown() {},
+      finishSessionTeardown() {},
+    },
     "./asyncStorage/unuploadedPingsList": {
       async getUnuploadedPingsListAsync() {
         return pending;
@@ -304,6 +308,8 @@ const state = {
   vm.runInNewContext(source, {
     exports,
     require(k) {
+      if (k === "./helpers/serialTasks")
+        return load("src/helpers/serialTasks.ts");
       return stubs[k] || {};
     },
     Date,

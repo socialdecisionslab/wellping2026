@@ -1,7 +1,14 @@
+import { beginUpload, finishUpload } from "./uploadActivity";
+import * as Crypto from "expo-crypto";
+import { withDataLock } from "./dataLock";
+import {
+  acknowledgeRevisionsAsync,
+  getUploadRevisionsAsync,
+  markPingDirtyAsync,
+} from "./uploadRevisions";
 import { StudyInfo } from "@wellping/study-schemas/lib/types";
 
 import { getAnswersAsync } from "./answers";
-import { removeFromUnuploadedPingsListAsync } from "./asyncStorage/unuploadedPingsList";
 import { beiweUploadDataForUserAsync } from "./beiwe";
 import {
   UserData,
@@ -66,7 +73,7 @@ export async function getUnuploadedDataAsync(): Promise<UnuploadedData> {
  * Returns a `DataUploadServerResponse` if successful.
  * Throws an error otherwise.
  */
-export async function uploadDataAsync(
+async function performUploadAsync(
   studyInfo: StudyInfo,
   setUploadStatusSymbol: (symbol: string) => void,
   {
@@ -137,15 +144,59 @@ export async function uploadDataAsync(
     );
   }
 
-  // Sucessfully uploaded.
-
-  if (!unuploadedOnly && "pings" in data) {
-    // If we have uploaded all the data, we can remove the uploaded pings from
-    // the unuploaded pings list.
-    const uploadedData = data as AllData;
-    const uploadedPingsList = uploadedData.pings.map((ping) => ping.id);
-    await removeFromUnuploadedPingsListAsync(uploadedPingsList);
-  }
-
   return response;
+}
+
+// Shared by automatic, foreground and manual uploads. Each queued attempt takes
+// a fresh snapshot; no concurrent request can overwrite or acknowledge another.
+let uploadTail: Promise<unknown> = Promise.resolve();
+export function uploadDataAsync(
+  studyInfo: StudyInfo,
+  setUploadStatusSymbol: (symbol: string) => void,
+  options: { unuploadedOnly: boolean; prefetchedData?: UploadData },
+): Promise<DataUploadServerResponse> {
+  beginUpload();
+  const run = uploadTail.then(async () => {
+    if (!isUsingServer(studyInfo))
+      throw new Error(
+        "No upload server configured. Responses remain saved on this device.",
+      );
+    const data: UploadData & {
+      revisions: import("./uploadRevisions").UploadRevisions;
+    } = await withDataLock(async () => {
+      const snapshot = options.unuploadedOnly
+        ? await getUnuploadedDataAsync()
+        : await getAllDataAsync();
+      const pings =
+        "pings" in snapshot ? snapshot.pings : snapshot.unuploadedPings;
+      let revisions = await getUploadRevisionsAsync();
+      // Legacy on-device records acquire a stable revision before their first send.
+      for (const ping of pings)
+        if (!revisions[ping.id]) await markPingDirtyAsync(ping.id);
+      revisions = await getUploadRevisionsAsync();
+      return {
+        ...snapshot,
+        studyId: studyInfo.id,
+        revisions: Object.fromEntries(
+          pings.map((p) => [p.id, revisions[p.id]]),
+        ),
+      };
+    });
+    data.receipt = await Crypto.digestStringAsync(
+      Crypto.CryptoDigestAlgorithm.SHA256,
+      JSON.stringify(data),
+    );
+    const response = await performUploadAsync(
+      studyInfo,
+      setUploadStatusSymbol,
+      { ...options, prefetchedData: data },
+    );
+    await withDataLock(() =>
+      acknowledgeRevisionsAsync(data.revisions, Object.keys(data.revisions)),
+    );
+    return response;
+  });
+  const finished = run.finally(finishUpload);
+  uploadTail = finished.catch(() => undefined);
+  return finished;
 }
