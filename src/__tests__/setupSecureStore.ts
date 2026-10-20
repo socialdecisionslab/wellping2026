@@ -25,7 +25,12 @@ const mockSecureStore: any = {
   getItemAsync: jest.fn((key) => {
     //console.log(`expo-secure-store getItemAsync(${key})`);
     return new Promise((resolve, reject) => {
-      if (mockSecureStore.__INTERNAL_MOCK_STORAGE__.hasOwnProperty(key)) {
+      if (
+        Object.prototype.hasOwnProperty.call(
+          mockSecureStore.__INTERNAL_MOCK_STORAGE__,
+          key,
+        )
+      ) {
         resolve(mockSecureStore.__INTERNAL_MOCK_STORAGE__[key]);
       } else {
         resolve(null);
@@ -35,7 +40,12 @@ const mockSecureStore: any = {
   deleteItemAsync: jest.fn((key) => {
     //console.log(`expo-secure-store deleteItemAsync(${key})`);
     return new Promise((resolve, reject) => {
-      if (mockSecureStore.__INTERNAL_MOCK_STORAGE__.hasOwnProperty(key)) {
+      if (
+        Object.prototype.hasOwnProperty.call(
+          mockSecureStore.__INTERNAL_MOCK_STORAGE__,
+          key,
+        )
+      ) {
         resolve(delete mockSecureStore.__INTERNAL_MOCK_STORAGE__[key]);
       } else {
         reject(new Error(`No such key "${key}"!`));

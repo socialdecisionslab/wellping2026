@@ -1,24 +1,47 @@
 {
   "cli": {
-    "version": ">= 0.41.0"
+    "version": ">= 16.0.0"
   },
   "build": {
     "development": {
-      "releaseChannel": "staging",
       "developmentClient": true,
-      "distribution": "internal"
+      "distribution": "internal",
+      "env": {
+        "WELLPING_LOCAL_ONLY": "1"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "env": {
+        "WELLPING_LOCAL_ONLY": "1"
+      },
+      "android": {
+        "buildType": "apk"
+      },
+      "ios": {
+        "simulator": true
+      }
+    },
+    "staging": {
+      "distribution": "internal",
+      "environment": "preview",
+      "env": {
+        "WELLPING_RELEASE_ENV": "staging",
+        "WELLPING_BACKEND_PROTOCOL": "wellping-v1"
+      },
+      "android": {
+        "buildType": "apk"
+      },
+      "ios": {
+        "simulator": false
+      }
     },
     "production": {
-      "releaseChannel": "prod-v1-1-2",
+      "environment": "production",
+      "autoIncrement": true,
       "env": {
-        "YARN_ENABLE_IMMUTABLE_INSTALLS": "false"
-      }
-    }
-  },
-  "submit": {
-    "production": {
-      "ios": {
-        "ascAppId": "1532364388"
+        "WELLPING_RELEASE_ENV": "production",
+        "WELLPING_BACKEND_PROTOCOL": "wellping-v1"
       }
     }
   }

@@ -15,7 +15,7 @@ import {
   act,
   waitFor,
   RenderAPI,
-} from "react-native-testing-library";
+} from "@testing-library/react-native";
 import waitForExpect from "wait-for-expect";
 
 import { QuestionType } from "../../helpers/helpers";
@@ -27,9 +27,9 @@ const A11Y_HINT = "Enter your answer here";
 const getTextInputA11YLabel = (index: number) => `text input ${index}`;
 const findTextInputAsync = async (
   index: number,
-  { findAllByA11yLabel }: RenderAPI,
+  { findAllByLabelText }: RenderAPI,
 ) => {
-  const textInputs = await findAllByA11yLabel(getTextInputA11YLabel(index));
+  const textInputs = await findAllByLabelText(getTextInputA11YLabel(index));
   expect(textInputs).toHaveLength(1);
   const textInput = textInputs[0];
   return textInput;
@@ -63,7 +63,7 @@ const basicTestForQuestionAsync = async (
       setDataValidationFunction={mockSetDataValidationFunction}
     />,
   );
-  const { getAllByA11yLabel, getAllByA11yHint, toJSON } = renderResults;
+  const { getAllByLabelText, getAllByA11yHint, toJSON } = renderResults;
 
   let textInputsLength = question.max;
   if (question.maxMinus) {
@@ -75,7 +75,7 @@ const basicTestForQuestionAsync = async (
 
   if (textInputsLength > 0) {
     // Wait for the text fields to be loaded.
-    await waitFor(() => getAllByA11yLabel(/^text input /));
+    await waitFor(() => getAllByLabelText(/^text input /));
   }
 
   expect(mockLoadingCompleted).toHaveBeenCalledTimes(1);
@@ -103,9 +103,9 @@ const basicTestForQuestionAsync = async (
 
   // Called when the dropdown items are changed.
   const mockSetDataValidationFunctionInitTimes = choices ? 2 : 1;
-  expect(mockSetDataValidationFunction).toHaveBeenCalledTimes(
+  await waitFor(() => expect(mockSetDataValidationFunction).toHaveBeenCalledTimes(
     mockSetDataValidationFunctionInitTimes,
-  );
+  ));
   expect(typeof codeDataValidationFunction).toBe("function");
 
   // This also helps test the placeholder property.

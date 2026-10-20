@@ -4,7 +4,7 @@ import {
   QuestionTypeType,
 } from "@wellping/study-schemas/lib/types";
 import React from "react";
-import { render } from "react-native-testing-library";
+import { render } from "@testing-library/react-native";
 
 import SurveyScreen, { SurveyScreenProps } from "../../SurveyScreen";
 import { QuestionType } from "../../helpers/helpers";

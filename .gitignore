@@ -70,3 +70,15 @@ coverage/**/*
 !.yarn/releases
 !.yarn/sdks
 !.yarn/versions
+
+# Generated native projects (Expo config is the source of truth).
+/ios/
+/android/
+/dist/
+
+# Python smoke-check bytecode.
+__pycache__/
+*.pyc
+
+# Local researcher tool compilation; never contains study/participant data.
+/.research-console-build/

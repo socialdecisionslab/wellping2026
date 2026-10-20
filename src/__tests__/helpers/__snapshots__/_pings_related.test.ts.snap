@@ -12,6 +12,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-01T08:09:55.000Z,
+        "type": "date",
       },
     },
   ],
@@ -25,6 +26,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-01T10:36:58.000Z,
+        "type": "date",
       },
     },
   ],
@@ -38,6 +40,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-01T13:19:34.000Z,
+        "type": "date",
       },
     },
   ],
@@ -51,6 +54,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-01T16:36:11.000Z,
+        "type": "date",
       },
     },
   ],
@@ -64,6 +68,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-01T19:15:53.000Z,
+        "type": "date",
       },
     },
   ],
@@ -77,6 +82,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-01T22:00:55.000Z,
+        "type": "date",
       },
     },
   ],
@@ -90,6 +96,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-02T08:16:04.000Z,
+        "type": "date",
       },
     },
   ],
@@ -103,6 +110,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-02T10:43:42.000Z,
+        "type": "date",
       },
     },
   ],
@@ -116,6 +124,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-02T12:46:55.000Z,
+        "type": "date",
       },
     },
   ],
@@ -129,6 +138,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-02T16:59:14.000Z,
+        "type": "date",
       },
     },
   ],
@@ -142,6 +152,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-02T19:12:20.000Z,
+        "type": "date",
       },
     },
   ],
@@ -155,6 +166,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-02T22:31:25.000Z,
+        "type": "date",
       },
     },
   ],
@@ -168,6 +180,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-03T08:17:39.000Z,
+        "type": "date",
       },
     },
   ],
@@ -181,6 +194,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-03T10:33:10.000Z,
+        "type": "date",
       },
     },
   ],
@@ -194,6 +208,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-03T12:37:51.000Z,
+        "type": "date",
       },
     },
   ],
@@ -207,6 +222,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-03T16:46:49.000Z,
+        "type": "date",
       },
     },
   ],
@@ -220,6 +236,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-03T18:48:06.000Z,
+        "type": "date",
       },
     },
   ],
@@ -233,6 +250,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-03T23:25:57.000Z,
+        "type": "date",
       },
     },
   ],
@@ -246,6 +264,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-04T08:05:15.000Z,
+        "type": "date",
       },
     },
   ],
@@ -259,6 +278,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-04T11:25:24.000Z,
+        "type": "date",
       },
     },
   ],
@@ -272,6 +292,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-04T13:20:51.000Z,
+        "type": "date",
       },
     },
   ],
@@ -285,6 +306,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-04T16:16:46.000Z,
+        "type": "date",
       },
     },
   ],
@@ -298,6 +320,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-04T19:15:07.000Z,
+        "type": "date",
       },
     },
   ],
@@ -311,6 +334,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-04T22:42:43.000Z,
+        "type": "date",
       },
     },
   ],
@@ -329,6 +353,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-11T17:22:07.000Z,
+        "type": "date",
       },
     },
   ],
@@ -342,6 +367,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-11T18:38:46.000Z,
+        "type": "date",
       },
     },
   ],
@@ -355,6 +381,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-11T22:08:53.000Z,
+        "type": "date",
       },
     },
   ],
@@ -368,6 +395,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-12T08:56:19.000Z,
+        "type": "date",
       },
     },
   ],
@@ -381,6 +409,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-12T11:11:10.000Z,
+        "type": "date",
       },
     },
   ],
@@ -394,6 +423,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-12T12:47:20.000Z,
+        "type": "date",
       },
     },
   ],
@@ -407,6 +437,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-12T16:11:10.000Z,
+        "type": "date",
       },
     },
   ],
@@ -420,6 +451,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-12T19:28:18.000Z,
+        "type": "date",
       },
     },
   ],
@@ -433,6 +465,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-12T23:21:52.000Z,
+        "type": "date",
       },
     },
   ],
@@ -446,6 +479,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-13T09:04:17.000Z,
+        "type": "date",
       },
     },
   ],
@@ -459,6 +493,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-13T10:54:32.000Z,
+        "type": "date",
       },
     },
   ],
@@ -472,6 +507,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-13T12:19:54.000Z,
+        "type": "date",
       },
     },
   ],
@@ -485,6 +521,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-13T16:55:10.000Z,
+        "type": "date",
       },
     },
   ],
@@ -498,6 +535,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-13T19:06:11.000Z,
+        "type": "date",
       },
     },
   ],
@@ -511,6 +549,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-13T22:25:40.000Z,
+        "type": "date",
       },
     },
   ],
@@ -524,6 +563,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-14T08:39:12.000Z,
+        "type": "date",
       },
     },
   ],
@@ -537,6 +577,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-14T11:06:39.000Z,
+        "type": "date",
       },
     },
   ],
@@ -550,6 +591,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-14T12:03:32.000Z,
+        "type": "date",
       },
     },
   ],
@@ -563,6 +605,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-14T17:18:28.000Z,
+        "type": "date",
       },
     },
   ],
@@ -576,6 +619,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-14T19:16:11.000Z,
+        "type": "date",
       },
     },
   ],
@@ -589,6 +633,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-14T23:28:54.000Z,
+        "type": "date",
       },
     },
   ],
@@ -607,6 +652,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-15T16:28:04.000Z,
+        "type": "date",
       },
     },
   ],
@@ -620,6 +666,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-15T18:07:19.000Z,
+        "type": "date",
       },
     },
   ],
@@ -633,6 +680,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-15T22:26:57.000Z,
+        "type": "date",
       },
     },
   ],
@@ -646,6 +694,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-16T08:34:44.000Z,
+        "type": "date",
       },
     },
   ],
@@ -659,6 +708,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-16T10:43:56.000Z,
+        "type": "date",
       },
     },
   ],
@@ -672,6 +722,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-16T13:05:27.000Z,
+        "type": "date",
       },
     },
   ],
@@ -685,6 +736,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-16T16:04:39.000Z,
+        "type": "date",
       },
     },
   ],
@@ -698,6 +750,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-16T18:41:31.000Z,
+        "type": "date",
       },
     },
   ],
@@ -711,6 +764,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-16T23:00:15.000Z,
+        "type": "date",
       },
     },
   ],
@@ -724,6 +778,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-17T09:19:41.000Z,
+        "type": "date",
       },
     },
   ],
@@ -737,6 +792,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-17T11:12:41.000Z,
+        "type": "date",
       },
     },
   ],
@@ -750,6 +806,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-17T12:12:26.000Z,
+        "type": "date",
       },
     },
   ],
@@ -763,6 +820,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-17T16:06:58.000Z,
+        "type": "date",
       },
     },
   ],
@@ -776,6 +834,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-17T18:19:50.000Z,
+        "type": "date",
       },
     },
   ],
@@ -789,6 +848,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-17T22:28:35.000Z,
+        "type": "date",
       },
     },
   ],
@@ -802,6 +862,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-18T08:08:01.000Z,
+        "type": "date",
       },
     },
   ],
@@ -815,6 +876,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-18T11:03:37.000Z,
+        "type": "date",
       },
     },
   ],
@@ -828,6 +890,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-18T13:18:36.000Z,
+        "type": "date",
       },
     },
   ],
@@ -841,6 +904,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-18T16:03:04.000Z,
+        "type": "date",
       },
     },
   ],
@@ -854,6 +918,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-18T18:20:22.000Z,
+        "type": "date",
       },
     },
   ],
@@ -867,6 +932,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-18T22:27:21.000Z,
+        "type": "date",
       },
     },
   ],
@@ -885,6 +951,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-11T18:38:46.000Z,
+        "type": "date",
       },
     },
   ],
@@ -898,6 +965,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-11T22:08:53.000Z,
+        "type": "date",
       },
     },
   ],
@@ -911,6 +979,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-12T08:56:19.000Z,
+        "type": "date",
       },
     },
   ],
@@ -924,6 +993,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-12T11:11:10.000Z,
+        "type": "date",
       },
     },
   ],
@@ -937,6 +1007,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-12T12:47:20.000Z,
+        "type": "date",
       },
     },
   ],
@@ -950,6 +1021,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-12T16:11:10.000Z,
+        "type": "date",
       },
     },
   ],
@@ -963,6 +1035,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-12T19:28:18.000Z,
+        "type": "date",
       },
     },
   ],
@@ -976,6 +1049,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-12T23:21:52.000Z,
+        "type": "date",
       },
     },
   ],
@@ -989,6 +1063,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-13T09:04:17.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1002,6 +1077,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-13T10:54:32.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1015,6 +1091,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-13T12:19:54.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1028,6 +1105,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-13T16:55:10.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1041,6 +1119,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-13T19:06:11.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1054,6 +1133,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-13T22:25:40.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1067,6 +1147,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-14T08:39:12.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1080,6 +1161,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-14T11:06:39.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1093,6 +1175,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-14T12:03:32.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1106,6 +1189,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-14T17:18:28.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1119,6 +1203,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-14T19:16:11.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1132,6 +1217,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-14T23:28:54.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1150,6 +1236,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-15T16:28:04.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1163,6 +1250,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-15T18:07:19.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1176,6 +1264,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-15T22:26:57.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1189,6 +1278,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-16T08:34:44.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1202,6 +1292,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-16T10:43:56.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1215,6 +1306,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-16T13:05:27.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1228,6 +1320,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-16T16:04:39.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1241,6 +1334,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-16T18:41:31.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1254,6 +1348,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-16T23:00:15.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1267,6 +1362,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-17T09:19:41.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1280,6 +1376,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-17T11:12:41.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1293,6 +1390,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-17T12:12:26.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1306,6 +1404,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-17T16:06:58.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1319,6 +1418,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-17T18:19:50.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1332,6 +1432,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-17T22:28:35.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1345,6 +1446,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-18T08:08:01.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1358,6 +1460,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-18T11:03:37.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1371,6 +1474,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-18T13:18:36.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1384,6 +1488,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-18T16:03:04.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1397,6 +1502,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-18T18:20:22.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1410,6 +1516,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-18T22:27:21.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1428,6 +1535,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-11T18:38:46.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1441,6 +1549,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-11T22:08:53.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1454,6 +1563,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-12T08:56:19.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1467,6 +1577,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-12T11:11:10.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1480,6 +1591,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-12T12:47:20.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1493,6 +1605,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-12T16:11:10.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1506,6 +1619,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-12T19:28:18.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1519,6 +1633,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-12T23:21:52.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1532,6 +1647,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-13T09:04:17.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1545,6 +1661,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-13T10:54:32.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1558,6 +1675,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-13T12:19:54.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1571,6 +1689,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-13T16:55:10.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1584,6 +1703,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-13T19:06:11.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1597,6 +1717,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-13T22:25:40.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1610,6 +1731,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-14T08:39:12.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1623,6 +1745,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-14T11:06:39.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1636,6 +1759,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-14T12:03:32.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1649,6 +1773,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-14T17:18:28.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1662,6 +1787,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-14T19:16:11.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1675,6 +1801,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-14T23:28:54.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1693,6 +1820,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-01T13:19:34.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1706,6 +1834,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-01T16:36:11.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1719,6 +1848,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-01T19:15:53.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1732,6 +1862,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-01T22:00:55.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1745,6 +1876,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-02T08:16:04.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1758,6 +1890,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-02T10:43:42.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1771,6 +1904,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-02T12:46:55.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1784,6 +1918,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-02T16:59:14.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1797,6 +1932,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-02T19:12:20.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1810,6 +1946,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-02T22:31:25.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1823,6 +1960,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-03T08:17:39.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1836,6 +1974,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-03T10:33:10.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1849,6 +1988,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-03T12:37:51.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1862,6 +2002,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-03T16:46:49.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1875,6 +2016,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-03T18:48:06.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1888,6 +2030,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-03T23:25:57.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1901,6 +2044,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-04T08:05:15.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1914,6 +2058,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-04T11:25:24.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1927,6 +2072,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-04T13:20:51.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1940,6 +2086,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-04T16:16:46.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1953,6 +2100,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-04T19:15:07.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1966,6 +2114,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-04T22:42:43.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1984,6 +2133,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-03T10:33:10.000Z,
+        "type": "date",
       },
     },
   ],
@@ -1997,6 +2147,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-03T12:37:51.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2010,6 +2161,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-03T16:46:49.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2023,6 +2175,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-03T18:48:06.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2036,6 +2189,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-03T23:25:57.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2049,6 +2203,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-04T08:05:15.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2062,6 +2217,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-04T11:25:24.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2075,6 +2231,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-04T13:20:51.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2088,6 +2245,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-04T16:16:46.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2101,6 +2259,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-04T19:15:07.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2114,6 +2273,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-04T22:42:43.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2127,6 +2287,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-05T08:16:30.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2140,6 +2301,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-05T11:26:37.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2153,6 +2315,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-05T12:47:18.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2166,6 +2329,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-05T16:59:46.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2179,6 +2343,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-05T18:49:30.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2192,6 +2357,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-05T22:33:47.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2205,6 +2371,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-06T08:11:01.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2218,6 +2385,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-06T10:01:13.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2231,6 +2399,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-06T13:00:58.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2244,6 +2413,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-06T16:19:00.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2257,6 +2427,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-06T18:18:17.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2270,6 +2441,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-06T22:07:22.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2288,6 +2460,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-28T23:29:53.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2301,6 +2474,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-29T09:27:22.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2314,6 +2488,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-29T11:00:56.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2327,6 +2502,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-29T12:43:39.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2340,6 +2516,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-29T16:32:41.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2353,6 +2530,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-29T18:52:45.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2366,6 +2544,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-29T23:08:56.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2379,6 +2558,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-30T08:29:44.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2392,6 +2572,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-30T10:00:49.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2405,6 +2586,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-30T12:23:25.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2418,6 +2600,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-30T16:29:40.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2431,6 +2614,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-30T18:12:15.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2449,6 +2633,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-11T08:11:07.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2462,6 +2647,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-11T10:22:07.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2475,6 +2661,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-11T12:33:07.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2488,6 +2675,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-11T16:44:07.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2501,6 +2689,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-11T18:55:07.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2514,6 +2703,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-11T22:44:07.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2527,6 +2717,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-12T08:56:19.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2540,6 +2731,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-12T11:11:10.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2553,6 +2745,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-12T12:47:20.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2566,6 +2759,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-12T16:11:10.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2579,6 +2773,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-12T19:28:18.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2592,6 +2787,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-12T23:21:52.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2605,6 +2801,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-13T09:04:17.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2618,6 +2815,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-13T10:54:32.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2631,6 +2829,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-13T12:19:54.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2644,6 +2843,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-13T16:55:10.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2657,6 +2857,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-13T19:06:11.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2670,6 +2871,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-13T22:25:40.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2683,6 +2885,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-14T08:39:12.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2696,6 +2899,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-14T11:06:39.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2709,6 +2913,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-14T12:03:32.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2722,6 +2927,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-14T17:18:28.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2735,6 +2941,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-14T19:16:11.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2748,6 +2955,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-14T23:28:54.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2766,6 +2974,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-11T16:44:07.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2779,6 +2988,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-11T18:55:07.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2792,6 +3002,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-11T22:44:07.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2805,6 +3016,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-12T08:56:19.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2818,6 +3030,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-12T11:11:10.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2831,6 +3044,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-12T12:47:20.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2844,6 +3058,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-12T16:11:10.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2857,6 +3072,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-12T19:28:18.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2870,6 +3086,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-12T23:21:52.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2883,6 +3100,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-13T09:04:17.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2896,6 +3114,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-13T10:54:32.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2909,6 +3128,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-13T12:19:54.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2922,6 +3142,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-13T16:55:10.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2935,6 +3156,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-13T19:06:11.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2948,6 +3170,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-13T22:25:40.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2961,6 +3184,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-14T08:39:12.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2974,6 +3198,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-14T11:06:39.000Z,
+        "type": "date",
       },
     },
   ],
@@ -2987,6 +3212,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-14T12:03:32.000Z,
+        "type": "date",
       },
     },
   ],
@@ -3000,6 +3226,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-14T17:18:28.000Z,
+        "type": "date",
       },
     },
   ],
@@ -3013,6 +3240,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-14T19:16:11.000Z,
+        "type": "date",
       },
     },
   ],
@@ -3026,6 +3254,7 @@ Array [
       "trigger": Object {
         "channelId": "ssnlPingChannel",
         "date": 2010-05-14T23:28:54.000Z,
+        "type": "date",
       },
     },
   ],

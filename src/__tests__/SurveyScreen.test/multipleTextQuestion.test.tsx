@@ -3,7 +3,7 @@
  * MultipleTextQuestionScreen.test.tsx.
  */
 import React from "react";
-import { render, RenderAPI } from "react-native-testing-library";
+import { render, RenderAPI } from "@testing-library/react-native";
 
 import SurveyScreen, { SurveyScreenProps } from "../../SurveyScreen";
 import { QuestionType } from "../../helpers/helpers";
@@ -33,11 +33,11 @@ afterEach(async () => {
 async function enterTextAsync(
   textFieldIndex: number,
   text: string,
-  { findByA11yLabel }: RenderAPI,
+  { findByLabelText }: RenderAPI,
 ) {
   await changeTextAndWaitForUpdateAsync(
     // `findBy` does the `waitFor` for us.
-    async () => await findByA11yLabel(`text input ${textFieldIndex}`),
+    async () => await findByLabelText(`text input ${textFieldIndex}`),
     text,
   );
 }

@@ -8,10 +8,8 @@ import { Alert } from "react-native";
 import {
   render,
   fireEvent,
-  A11yAPI,
-  FireEventAPI,
   waitFor,
-} from "react-native-testing-library";
+} from "@testing-library/react-native";
 import { ReactTestInstance } from "react-test-renderer";
 
 import { QuestionType } from "../../helpers/helpers";
@@ -21,9 +19,9 @@ import { simplePipeInExtraMetaData } from "../helper";
 const getSelectionA11YLabel = (option: string) => `select ${option}`;
 const getSelection = (
   option: string,
-  getAllByA11yLabel: A11yAPI["getAllByA11yLabel"],
+  getAllByLabelText: ReturnType<typeof render>["getAllByLabelText"],
 ) => {
-  const selections = getAllByA11yLabel(getSelectionA11YLabel(option));
+  const selections = getAllByLabelText(getSelectionA11YLabel(option));
   expect(selections).toHaveLength(1);
   const selection = selections[0];
   return selection;
@@ -50,7 +48,7 @@ const basicTestForQuestionAsync = async (
       setDataValidationFunction={mockSetDataValidationFunction}
     />,
   );
-  const { getAllByA11yLabel, toJSON } = renderResults;
+  const { getAllByLabelText, toJSON } = renderResults;
 
   expect(mockLoadingCompleted).toHaveBeenCalledTimes(1);
 
@@ -60,12 +58,12 @@ const basicTestForQuestionAsync = async (
   // There shouldn't need to be any validation
   expect(mockSetDataValidationFunction).not.toHaveBeenCalled();
 
-  const selections = getAllByA11yLabel(/select (.*?)/);
+  const selections = getAllByLabelText(/select (.*?)/);
   expect(selections).toHaveLength(10 + 4);
 
   let calledTimes = 0;
   if (inputValues[0]) {
-    const leftSelection = getSelection(`${inputValues[0]}`, getAllByA11yLabel);
+    const leftSelection = getSelection(`${inputValues[0]}`, getAllByLabelText);
     fireEvent.press(leftSelection);
 
     calledTimes += 1;
@@ -75,7 +73,7 @@ const basicTestForQuestionAsync = async (
     expect(mockOnDataChangeFn).toHaveBeenCalledTimes(calledTimes);
   }
   if (inputValues[1]) {
-    const rightSelection = getSelection(`${inputValues[1]}`, getAllByA11yLabel);
+    const rightSelection = getSelection(`${inputValues[1]}`, getAllByLabelText);
     fireEvent.press(rightSelection);
 
     calledTimes += 1;

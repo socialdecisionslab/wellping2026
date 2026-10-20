@@ -78,6 +78,46 @@ export const notificationsTest = () => {
       );
     });
 
+    test.each([
+      ["expired cache", "2010-05-11T08:00:00Z", "2010-05-10T12:00:00Z"],
+      ["schedule rollover", "2010-05-12T08:00:00Z", "2010-05-11T12:00:00Z"],
+      ["future-only cache", "2010-05-11T08:00:00Z", "2010-05-12T12:00:00Z"],
+    ])("%s preserves today's future reminders", async (_, now, cached) => {
+      DateMock.advanceTo(+new Date(now));
+      await setNotificationsAsync();
+      const expected = [...spyScheduleNotificationAsync.mock.calls];
+      expect(
+        expected.some(([request]) => {
+          const trigger = request.trigger as { date: Date };
+          return trigger.date.toISOString().slice(0, 10) === now.slice(0, 10);
+        }),
+      ).toBe(true);
+      spyScheduleNotificationAsync.mockClear();
+      jest
+        .spyOn(notificationTimesAsyncStorage, "getNotificationTimesAsync")
+        .mockResolvedValue(getMockNotificationTimesInfos([new Date(cached)]));
+      await setNotificationsAsync();
+      expect(spyScheduleNotificationAsync.mock.calls).toEqual(expected);
+    });
+
+    test("same-day restart preserves cached randomized reminders without duplicates", async () => {
+      DateMock.advanceTo(+new Date("2010-05-11T08:00:00Z"));
+      await setNotificationsAsync();
+      const expected = [...spyScheduleNotificationAsync.mock.calls];
+      const saved =
+        await notificationTimesAsyncStorage.getNotificationTimesAsync();
+      spyScheduleNotificationAsync.mockClear();
+      await setNotificationsAsync();
+      expect(spyScheduleNotificationAsync.mock.calls).toEqual(expected);
+      expect(
+        await notificationTimesAsyncStorage.getNotificationTimesAsync(),
+      ).toEqual(saved);
+      const dates = spyScheduleNotificationAsync.mock.calls.map(
+        ([request]) => +(request.trigger as { date: Date }).date,
+      );
+      expect(new Set(dates).size).toBe(dates.length);
+    });
+
     test("after the study already ends", async () => {
       DateMock.advanceTo(+new Date("2010-08-08T20:08:08Z"));
 
@@ -153,6 +193,7 @@ export const notificationsTest = () => {
           expect(
             spyScheduleNotificationAsync.mock.calls[i]?.[0].trigger,
           ).toStrictEqual({
+            type: Notifications.SchedulableTriggerInputTypes.DATE,
             date: notificationTimes[i].notificationDate,
             channelId: ANDROID_CHANNEL_NAME,
           });
@@ -176,6 +217,7 @@ export const notificationsTest = () => {
           expect(
             spyScheduleNotificationAsync.mock.calls[i - 3][0]?.trigger,
           ).toStrictEqual({
+            type: Notifications.SchedulableTriggerInputTypes.DATE,
             date: notificationTimes[i].notificationDate,
             channelId: ANDROID_CHANNEL_NAME,
           });

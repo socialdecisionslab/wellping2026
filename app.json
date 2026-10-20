@@ -3,24 +3,18 @@
     "name": "Well Ping",
     "slug": "wellping-app",
     "owner": "ssnl",
-    "privacy": "public",
     "platforms": ["ios", "android"],
     "version": "1.1.3",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "notification": {
-      "iosDisplayInForeground": true
-    },
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
     "updates": {
-      "enabled": true,
-      "fallbackToCacheTimeout": 0
+      "enabled": false
     },
-    "assetBundlePatterns": ["**/*"],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "app.wellping",
@@ -37,7 +31,6 @@
       },
       "permissions": [],
       "softwareKeyboardLayoutMode": "pan",
-      "useNextNotificationsApi": true,
       "intentFilters": [
         {
           "action": "VIEW",
@@ -53,6 +46,7 @@
         }
       ],
       "allowBackup": false
-    }
+    },
+    "plugins": ["expo-secure-store", "expo-notifications"]
   }
 }

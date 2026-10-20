@@ -15,11 +15,9 @@ import { Alert } from "react-native";
 import {
   render,
   fireEvent,
-  A11yAPI,
-  FireEventAPI,
   waitFor,
   RenderAPI,
-} from "react-native-testing-library";
+} from "@testing-library/react-native";
 import { ReactTestInstance } from "react-test-renderer";
 
 import { QuestionType } from "../../helpers/helpers";
@@ -33,9 +31,9 @@ import {
 export const getSelectionA11YLabel = (option: string) => `select ${option}`;
 export const getSelection = (
   option: string,
-  getAllByA11yLabel: A11yAPI["getAllByA11yLabel"],
+  getAllByLabelText: ReturnType<typeof render>["getAllByLabelText"],
 ) => {
-  const selections = getAllByA11yLabel(getSelectionA11YLabel(option));
+  const selections = getAllByLabelText(getSelectionA11YLabel(option));
   expect(selections).toHaveLength(1);
   const selection = selections[0];
   return selection;
@@ -50,12 +48,12 @@ test.each([true, false])("YesNo question with input %p", async (inputValue) => {
   } as YesNoQuestion;
 
   const {
-    renderResults: { getAllByA11yLabel },
+    renderResults: { getAllByLabelText },
     mockOnDataChangeFn,
   } = await basicTestForChoicesQuestionScreenAsync(question);
 
   if (inputValue === true) {
-    const yesSelection = getSelection(`Yes`, getAllByA11yLabel);
+    const yesSelection = getSelection(`Yes`, getAllByLabelText);
     fireEvent.press(yesSelection);
 
     expect(mockOnDataChangeFn).toHaveBeenNthCalledWith(1, {
@@ -63,7 +61,7 @@ test.each([true, false])("YesNo question with input %p", async (inputValue) => {
     } as YesNoAnswerData);
     expect(mockOnDataChangeFn).toHaveBeenCalledTimes(1);
   } else if (inputValue === false) {
-    const noSelection = getSelection(`No`, getAllByA11yLabel);
+    const noSelection = getSelection(`No`, getAllByLabelText);
     fireEvent.press(noSelection);
 
     expect(mockOnDataChangeFn).toHaveBeenNthCalledWith(1, {
@@ -123,10 +121,10 @@ const basicTestForChoicesQuestionScreenAsync = async (
       setDataValidationFunction={mockSetDataValidationFunction}
     />,
   );
-  const { findAllByA11yLabel, getAllByA11yLabel } = renderResults;
+  const { findAllByLabelText, getAllByLabelText } = renderResults;
 
   // Wait for the selections to be loaded.
-  await waitFor(() => getAllByA11yLabel(/^select /));
+  await waitFor(() => getAllByLabelText(/^select /));
 
   expect(mockLoadingCompleted).toHaveBeenCalledTimes(1);
 
@@ -135,7 +133,7 @@ const basicTestForChoicesQuestionScreenAsync = async (
   // There shouldn't need to be any validation
   expect(mockSetDataValidationFunction).not.toHaveBeenCalled();
 
-  const selections = await findAllByA11yLabel(/select (.*?)/);
+  const selections = await findAllByLabelText(/select (.*?)/);
   expect(selections).toHaveLength(choices.length);
 
   const displayedList: string[] = selections.map((selection) =>
@@ -181,14 +179,14 @@ const inputTestForChoicesWithSingleAnswerQuestionAsync = async (
   question: ChoicesWithSingleAnswerQuestion,
   inputValueSequence: string[],
 ) => {
-  const { getAllByA11yLabel } = renderResults;
+  const { getAllByLabelText } = renderResults;
 
   let expectedResults: string | null = null;
 
   let calledTimes = 0;
   for (let i = 0; i < inputValueSequence.length; i++) {
     const inputValue = inputValueSequence[i];
-    const selection = getSelection(inputValue, getAllByA11yLabel);
+    const selection = getSelection(inputValue, getAllByLabelText);
     fireEvent.press(selection);
 
     expectedResults = inputValue;
@@ -212,7 +210,7 @@ const inputTestForChoicesWithMultipleAnswersQuestionAsync = async (
   question: ChoicesWithMultipleAnswersQuestion,
   inputValueSequence: string[],
 ) => {
-  const { getAllByA11yLabel } = renderResults;
+  const { getAllByLabelText } = renderResults;
 
   const expectedResults = displayedList.map((choice) => [
     choice,
@@ -222,7 +220,7 @@ const inputTestForChoicesWithMultipleAnswersQuestionAsync = async (
   let calledTimes = 0;
   for (let i = 0; i < inputValueSequence.length; i++) {
     const inputValue = inputValueSequence[i];
-    const selection = getSelection(inputValue, getAllByA11yLabel);
+    const selection = getSelection(inputValue, getAllByLabelText);
     fireEvent.press(selection);
 
     const key = expectedResults.findIndex((value) => value[0] === inputValue);

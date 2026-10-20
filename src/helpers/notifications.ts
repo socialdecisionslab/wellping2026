@@ -32,6 +32,19 @@ import {
 export const ANDROID_CHANNEL_NAME = "ssnlPingChannel";
 
 export async function setupNotificationsPermissionAsync(): Promise<boolean> {
+  if (Platform.OS === "android") {
+    await Notifications.setNotificationChannelAsync(ANDROID_CHANNEL_NAME, {
+      name: "Well Pings",
+      importance: Notifications.AndroidImportance.HIGH,
+      bypassDnd: true,
+      description: "Pings from WellPing.",
+      lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+      showBadge: true,
+      sound: "default",
+      enableLights: true,
+      enableVibrate: true,
+    });
+  }
   const existingPermission = await Notifications.getPermissionsAsync();
   let finalPermission = existingPermission;
 
@@ -43,7 +56,6 @@ export async function setupNotificationsPermissionAsync(): Promise<boolean> {
         allowAlert: true,
         allowBadge: true,
         allowSound: true,
-        allowAnnouncements: true,
       },
     });
     finalPermission = results;
@@ -57,21 +69,6 @@ export async function setupNotificationsPermissionAsync(): Promise<boolean> {
   if (!finalGranted) {
     return false;
   } else {
-    if (Platform.OS === "android") {
-      await Notifications.setNotificationChannelAsync(ANDROID_CHANNEL_NAME, {
-        name: "Well Pings",
-        importance: Notifications.AndroidImportance.HIGH,
-        bypassDnd: true,
-        description: "Pings from WellPing.",
-        lockscreenVisibility:
-          Notifications.AndroidNotificationVisibility.PUBLIC,
-        showBadge: true,
-        sound: "default",
-        enableLights: true,
-        enableVibrate: true,
-      });
-    }
-
     return true;
   }
 }
@@ -86,6 +83,7 @@ function getNotificationRequestInput(
       ...content,
     },
     trigger: {
+      type: Notifications.SchedulableTriggerInputTypes.DATE,
       date,
       channelId: ANDROID_CHANNEL_NAME,
     },
@@ -132,7 +130,7 @@ export async function setNotificationsAsync() {
 
   for (
     let date =
-      currentlySetNotifications.length === 0
+      notificationTimes.length === 0
         ? startDate
         : addDays(startDate, 1);
     date < setNotificationsUntil;

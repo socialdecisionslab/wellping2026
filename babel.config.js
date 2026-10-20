@@ -6,7 +6,6 @@ module.exports = function (api) {
       ...(production
         ? [require.resolve("./scripts/babel-strip-console.cjs")]
         : []),
-      "babel-plugin-transform-typescript-metadata", // Previously for Typeorm, but keep it here just to be safe.
     ],
   };
 };

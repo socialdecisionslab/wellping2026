@@ -6,7 +6,7 @@
 
 # Well Ping
 
-[![CI](https://github.com/wellping/wellping/actions/workflows/jest.yml/badge.svg)](https://github.com/wellping/wellping/actions/workflows/jest.yml) [![runs with expo](https://img.shields.io/badge/Runs%20with%20Expo-000.svg?style=flat-square&logo=EXPO&labelColor=f3f3f3&logoColor=000)](https://expo.dev/)
+[![CI](https://github.com/socialdecisionslab/wellping2026/actions/workflows/jest.yml/badge.svg)](https://github.com/socialdecisionslab/wellping2026/actions/workflows/jest.yml) [![runs with expo](https://img.shields.io/badge/Runs%20with%20Expo-000.svg?style=flat-square&logo=EXPO&labelColor=f3f3f3&logoColor=000)](https://expo.dev/)
 
 A React Native survey app that pings you once a while to answer questions!
 
@@ -26,38 +26,22 @@ A React Native survey app that pings you once a while to answer questions!
 
 - [WellPing EMA Parser](https://github.com/StanfordSocialNeuroscienceLab/wellping-ema-parser)
 
-## Demo
-
-Log in with the login code
-
-```
-__debug__-__test__-https://debug.local.wellping.ssnl.stanford.edu/DEBUG_STUDY.json
-```
-
-Alternatively, click this link on your phone to automatically enter the login code in the app: https://wellping.github.io/app/login?code=__debug__-__test__-https%3A%2F%2Fdebug.local.wellping.ssnl.stanford.edu%2FDEBUG_STUDY.json
-
-> `https://debug.local.wellping.ssnl.stanford.edu/DEBUG_STUDY.json` is a local study file URL (learn more in the [`local/`](./local/) folder). It can be logged in with any non-empty username and password combination and will not upload anything.
-
 ## Development
 
-Use Node **16.20.2** (see `.nvmrc`) for this legacy Expo 44 baseline. Yarn and
-Expo CLI are pinned locally; no global CLI or account login is needed.
+The canonical repository is [socialdecisionslab/wellping2026](https://github.com/socialdecisionslab/wellping2026). As of October 20, 2026, `main` remains the older baseline. [PR #14](https://github.com/socialdecisionslab/wellping2026/pull/14) consolidates the mobile foundation, participant experience, lifecycle recovery, PR #13 release safeguards, local researcher workbench, and operational recovery/provenance work. See the [PR resolution record](docs/modernization/pr-resolution-2026-10-20.md) and [app assessment](docs/modernization/integrated-candidate-2026-10-20.md) for source commits, validation, and release gates. CI badges are not participant-release approval.
 
-```bash
-# If nvm is installed:
+The modernization candidate uses Expo **57.0.30**, React Native **0.86.3**, Node **22.23.3**, and Corepack-pinned Yarn **4.18.1**.
+
+```sh
 nvm install
 nvm use
-node scripts/check-environment.cjs
-node .yarn/releases/yarn-3.1.1.cjs install --immutable
-node .yarn/releases/yarn-3.1.1.cjs test:ci
-node .yarn/releases/yarn-3.1.1.cjs smoke:local
-node .yarn/releases/yarn-3.1.1.cjs start:local
+corepack yarn install --immutable
+corepack yarn test:ci
+corepack yarn smoke:local
+corepack yarn start:local
 ```
 
-The local runner uses synthetic questions and separate storage, with no login,
-notifications, or uploads. It needs an SDK-44-compatible native client to view;
-the smoke check compiles both platforms without one. Restart after code edits.
-See [local development and troubleshooting](./docs/local-development.md).
+The isolated app previews the existing questionnaire using synthetic answers, with no login, notification scheduling, or uploads. See [local development](./docs/local-development.md) for native build requirements and [December readiness](./docs/december-readiness.md) for remaining study preparation. The original store links above are historical references, not this candidate's distribution.
 
 ### `@wellping/study-schemas`
 
@@ -66,4 +50,4 @@ rebuild a Git dependency. See [artifact provenance](./vendor/README.md).
 
 ## Deployment
 
-See https://wellping.github.io/wellping/publishing-updates-and-versioning.html.
+This candidate has not been released. Follow the [December release runbook](./docs/release/deployment.md) and [proposed Beiwe integration contract](./docs/release/beiwe-contract.md). Client reliability changes are implemented and release builds require explicit lab configuration and backend contract approval. Hosting, server implementation, signing, physical-device evidence, and the authorized pilot remain release gates.

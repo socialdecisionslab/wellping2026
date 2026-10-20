@@ -10,6 +10,8 @@ function load(file, mocks) {
     {
       compilerOptions: {
         module: ts.ModuleKind.CommonJS,
+        // VM mocks explicitly expose default exports; keep this contract across TS versions.
+        esModuleInterop: false,
         jsx: ts.JsxEmit.React,
       },
     },
@@ -36,6 +38,7 @@ function load(file, mocks) {
     "@react-native-async-storage/async-storage": {},
     "expo-constants": { default: {} },
     "expo-device": {},
+    "expo-application": {},
     "react-native-uuid": {},
     "react-native": {
       Share: {
@@ -50,6 +53,7 @@ function load(file, mocks) {
       },
     },
     "./asyncStorage/asyncStorageConfig": {},
+    "./localDiagnostics": { recordLocalDiagnostic() {} },
   });
   const secret = "SYNTHETIC_SECRET_RESPONSE_CANARY";
   debug.logError(new Error(secret));
@@ -81,21 +85,31 @@ function load(file, mocks) {
   }
   let dequeued = false;
   const upload = load("src/helpers/dataUpload.ts", {
-    "./answers": {},
-    "./asyncStorage/unuploadedPingsList": {
-      removeFromUnuploadedPingsListAsync: async () => {
+    "expo-crypto": {
+      CryptoDigestAlgorithm: { SHA256: "SHA256" },
+      digestStringAsync: async () => "synthetic-receipt",
+    },
+    "../../config/release": { RELEASE: undefined },
+    "./beiwe": {},
+    "./firebase": {},
+    "./dataJournal": {
+      captureDataSnapshotAsync: async () => ({
+        owner: { username: "fixture", loginSessionId: "synthetic-session" },
+        user: { username: "fixture" },
+        pings: [{ id: "fixture" }],
+        answers: [],
+        revisions: { fixture: 1 },
+        studyVersions: { fixture: "synthetic-v1" },
+      }),
+      assertDataOwnerAsync: async () => {},
+      acknowledgeDataSnapshotAsync: async () => {
         dequeued = true;
       },
     },
-    "./beiwe": {},
-    "./firebase": {},
-    "./loginSession": {},
-    "./pings": {},
-    "./secureStore/user": {
-      secureGetUserAsync: async () => ({ username: "fixture" }),
-    },
-    "./server": { isUsingServer: () => false },
+    "./studyFile": { getStudyInfoAsync: async () => ({ server: {} }) },
+    "./server": { isUsingFirebase: () => false, isUsingBeiwe: () => false },
     "./debug": {
+      getUserInstallationInfoAsync: async () => ({ synthetic: true }),
       HOME_SCREEN_DEBUG_VIEW_SYMBOLS: {
         UPLOAD: { UPLOADING: "~", INITIAL: "" },
       },
@@ -104,7 +118,6 @@ function load(file, mocks) {
   await assert.rejects(
     upload.uploadDataAsync({ server: {} }, () => {}, {
       unuploadedOnly: false,
-      prefetchedData: { pings: [{ id: "fixture" }] },
     }),
     /No upload server/,
   );

@@ -1,114 +1,64 @@
 require("./check-environment.cjs");
-const assert = require("assert");
-const http = require("http");
-const path = require("path");
-const { spawn, spawnSync } = require("child_process");
-
-const port = Number(process.env.WELLPING_SMOKE_PORT || 19800);
-const origin = `http://127.0.0.1:${port}`;
-let log = "";
-let exited = false;
-const child = spawn(
-  process.execPath,
-  [
-    path.join(__dirname, "start-local.cjs"),
-    "--port",
-    String(port),
-    "--max-workers",
-    "2",
-  ],
-  {
-    detached: process.platform !== "win32",
-    stdio: ["ignore", "pipe", "pipe"],
-  },
-);
-for (const stream of [child.stdout, child.stderr]) {
-  stream.on("data", (data) => {
-    log = (log + data).slice(-12000);
-  });
-}
-child.on("exit", () => {
-  exited = true;
-});
-child.on("error", (error) => {
-  log += error.message;
-  exited = true;
-});
-
-function request(url, headers = {}) {
-  const parsed = new URL(url);
-  assert.strictEqual(
-    parsed.hostname,
-    "127.0.0.1",
-    "Smoke checks must stay on loopback",
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
+const { spawnSync } = require("node:child_process");
+const output = fs.mkdtempSync(path.join(os.tmpdir(), "wellping-bundles-"));
+const env = {
+  ...process.env,
+  WELLPING_LOCAL_ONLY: "1",
+  CI: "1",
+  EXPO_OFFLINE: "1",
+  EXPO_NO_TELEMETRY: "1",
+};
+try {
+  const { getConfig } = require("expo/config");
+  process.env.WELLPING_LOCAL_ONLY = "1";
+  const { exp } = getConfig(process.cwd());
+  assert.equal(exp.extra.wellpingLocalOnly, true);
+  assert.equal(exp.updates.enabled, false);
+  assert.equal(exp.ios.bundleIdentifier, "app.wellping.local");
+  assert.equal(exp.android.package, "app.wellping.local");
+  const result = spawnSync(
+    process.execPath,
+    [
+      require.resolve("expo/bin/cli"),
+      "export",
+      "--platform",
+      "all",
+      "--output-dir",
+      output,
+      "--source-maps",
+      "--no-bytecode",
+      "--max-workers",
+      "2",
+    ],
+    { env, stdio: "inherit" },
   );
-  return new Promise((resolve, reject) => {
-    const req = http.get(parsed, { headers }, (res) => {
-      let body = "";
-      res.setEncoding("utf8");
-      res.on("data", (chunk) => {
-        body += chunk;
-      });
-      res.on("end", () =>
-        res.statusCode === 200
-          ? resolve(body)
-          : reject(new Error(`HTTP ${res.statusCode}: ${body.slice(0, 500)}`)),
-      );
-      res.on("error", reject);
-    });
-    req.setTimeout(90000, () =>
-      req.destroy(new Error("Local bundle request timed out")),
-    );
-    req.on("error", reject);
-  });
-}
-
-async function main() {
-  const deadline = Date.now() + 90000;
-  while (!log.includes("Your native app is running")) {
-    if (exited || Date.now() > deadline)
-      throw new Error("Local server did not start");
-    await new Promise((resolve) => setTimeout(resolve, 250));
-  }
+  assert.equal(result.status, 0, "Both mobile bundles must compile");
   for (const platform of ["ios", "android"]) {
-    const manifest = JSON.parse(
-      await request(origin, {
-        "Exponent-Platform": platform,
-        Accept: "application/json",
-      }),
+    const directory = path.join(output, "_expo", "static", "js", platform);
+    const maps = fs
+      .readdirSync(directory)
+      .filter((name) => name.endsWith(".map"));
+    assert(maps.length > 0, `${platform}: missing source map`);
+    const sources = maps.flatMap(
+      (name) =>
+        JSON.parse(fs.readFileSync(path.join(directory, name), "utf8")).sources,
     );
-    assert.strictEqual(manifest.entryPoint, "./local/index.js");
-    assert.strictEqual(manifest.extra.wellpingLocalOnly, true);
-    assert.strictEqual(manifest.updates.enabled, false);
-    assert.strictEqual(manifest.slug, "wellping-local");
-    const bundle = await request(manifest.bundleUrl);
-    assert(bundle.includes("synthetic local test"));
     assert(
-      !bundle.includes("src/RootScreen.tsx"),
-      "Production enrollment must not be in the local bundle",
+      sources.some((name) => name.endsWith("local/LocalApp.tsx")),
+      `${platform}: local entry missing`,
+    );
+    assert(
+      !sources.some((name) => name.endsWith("src/RootScreen.tsx")),
+      `${platform}: production entry leaked`,
     );
     console.log(
-      `${platform}: isolated manifest and JavaScript bundle OK (${Buffer.byteLength(
-        bundle,
-      )} bytes).`,
+      `${platform}: compiled isolated questionnaire bundle; production enrollment excluded.`,
     );
   }
+} finally {
+  fs.rmSync(output, { recursive: true, force: true });
 }
-
-main()
-  .catch((error) => {
-    console.error(error.message + "\n" + log);
-    process.exitCode = 1;
-  })
-  .finally(() => {
-    if (!child.pid) return;
-    if (process.platform === "win32") {
-      spawnSync("taskkill", ["/pid", String(child.pid), "/T", "/F"]);
-    } else {
-      try {
-        process.kill(-child.pid, "SIGTERM");
-      } catch (error) {
-        if (error.code !== "ESRCH") throw error;
-      }
-    }
-  });

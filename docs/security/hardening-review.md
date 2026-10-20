@@ -1,5 +1,7 @@
 # Security hardening review
 
+Historical backport rationale follows. For current release configuration and outstanding gates, see the [release runbook](../release/deployment.md), [measured baseline](../audit/baseline.md), and [development progress](../AUTONOMOUS_PROGRESS.md). Older tooling instructions below are superseded.
+
 These client changes are a development baseline, **not production-security approval**. They port the security-only changes from PR #2 (`b3bdca5`) onto the original `cd3e808` baseline plus PRs #1 and #3. The unrelated upstream Expo 49 / app 1.1.16 history in #2 is deliberately deferred. See [PR reconciliation](../pr-reconciliation.md).
 
 ## Changes
@@ -16,11 +18,11 @@ These client changes are a development baseline, **not production-security appro
 Follow [local development](../local-development.md), then run:
 
 ```sh
-node .yarn/releases/yarn-3.1.1.cjs test:ci
-node .yarn/releases/yarn-3.1.1.cjs smoke:local
+corepack yarn test:ci
+corepack yarn smoke:local
 ```
 
-`test:ci` includes TypeScript, the full Jest suite and four offline security checks. Those checks cover Unicode chunk limits, interrupted writes, verified migration, session isolation, serialized writes, cleanup/logout refusal, terminal recovery/retry, completed-ping display, HTTPS/origin/template rules, diagnostic canaries, removal of debug entry points, and failed-upload queue preservation. All data is synthetic and native APIs are mocked.
+`test:ci` includes TypeScript, the full Jest suite and five offline security checks. Those checks cover Unicode chunk limits, interrupted writes, verified migration, session isolation, serialized writes, cleanup/logout refusal, terminal recovery/retry, completed-ping display, HTTPS/origin/template rules, diagnostic canaries, removal of debug entry points, and failed-upload queue preservation. All data is synthetic and native APIs are mocked.
 
 The backport uses the already pinned UUID dependency because Expo 44 does not provide the newer `Crypto.randomUUID` API. Jest uses real SHA-256 through Node for mocked native crypto and explicit synthetic participant sessions. Five existing snapshots changed only to replace internal error details with fixed messages; answer snapshots and normal survey rendering remain unchanged.
 

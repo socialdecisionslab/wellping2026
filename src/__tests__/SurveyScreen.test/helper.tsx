@@ -1,10 +1,11 @@
 import { Ping, StudyInfo } from "@wellping/study-schemas/lib/types";
 import {
   fireEvent,
+  act,
   waitFor,
   waitForElementToBeRemoved,
   RenderAPI,
-} from "react-native-testing-library";
+} from "@testing-library/react-native";
 import waitForExpect from "wait-for-expect";
 
 import { getAnswersAsync } from "../../helpers/answers";
@@ -41,8 +42,10 @@ export function getBaseProps() {
   };
 }
 
-export async function setUpSurveyScreenTestAsync(): Promise<Ping> {
-  mockCurrentStudyInfo(STUDY_INFO);
+export async function setUpSurveyScreenTestAsync(
+  studyInfo: StudyInfo = STUDY_INFO,
+): Promise<Ping> {
+  mockCurrentStudyInfo(studyInfo);
   await secureStoreUserAsync({
     username: "synthetic-renderer",
     password: "test-only",
@@ -150,7 +153,7 @@ export async function tearDownSurveyScreenTestAsync(
  */
 export async function testCurrentQuestionAsync({
   renderResults: {
-    getByA11yLabel,
+    getByLabelText,
     queryByTestId,
     findByTestId,
     getByTestId,
@@ -170,13 +173,20 @@ export async function testCurrentQuestionAsync({
   onFinishFn?: jest.Mock;
 }): Promise<void> {
   // Wait for the question to be loaded.
-  await waitFor(() => getByTestId(QUESTION_TITLE_TESTID));
+  await waitFor(() => {
+    expect(getByTestId(QUESTION_TITLE_TESTID)).toBeTruthy();
+    expect(getByTestId(MAIN_SURVEY_SCREEN_VIEW).props.pointerEvents).toBe(
+      "auto",
+    );
+  });
   expect(queryByTestId(QUESTION_TITLE_TESTID)).not.toBeNull();
 
   const getCurrentQuestionTitle = () =>
     getByTestId(QUESTION_TITLE_TESTID).props.children;
 
-  await expectCurrentQuestionAsync(getCurrentQuestionTitle);
+  await act(async () => {
+    await expectCurrentQuestionAsync(getCurrentQuestionTitle);
+  });
 
   await waitForExpect(async () => {
     // Expect the screen to return to non-blank after the transition between
@@ -186,21 +196,15 @@ export async function testCurrentQuestionAsync({
     ).toBe(1);
   });
 
-  // For some reason we have to do this to ensure `fireEvent` works in
-  // `expectCurrentQuestionAsync`.
-  await new Promise<void>((resolve, reject) => {
-    setTimeout(() => {
-      resolve();
-    }, 0);
-  });
-
   const currentQuestionTitle = getCurrentQuestionTitle();
 
-  if (nextButton === "next") {
-    fireEvent.press(getByA11yLabel(NEXT_BUTTON_A11YLABEL));
-  } else if (nextButton === "pna") {
-    fireEvent.press(getByA11yLabel(PNA_BUTTON_A11YLABEL));
-  }
+  await act(async () => {
+    if (nextButton === "next") {
+      fireEvent.press(getByLabelText(NEXT_BUTTON_A11YLABEL));
+    } else if (nextButton === "pna") {
+      fireEvent.press(getByLabelText(PNA_BUTTON_A11YLABEL));
+    }
+  });
 
   if (waitForAndTestEndPage) {
     if (queryByTestId(QUESTION_TITLE_TESTID)) {

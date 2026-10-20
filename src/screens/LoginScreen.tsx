@@ -1,3 +1,4 @@
+import { RELEASE } from "../../config/release";
 import * as Linking from "expo-linking";
 import * as WebBrowser from "expo-web-browser";
 import React from "react";
@@ -16,13 +17,13 @@ import { CONFIG } from "../../config/config";
 import {
   JS_VERSION_NUMBER,
   alertWithShareButtonContainingDebugInfoAsync,
-  getCriticalProblemTextForUser,
   shareDebugTextAsync,
 } from "../helpers/debug";
+import { completePendingEnrollmentAsync } from "../helpers/failedEnrollment";
 import { LoginSchema } from "../helpers/schemas/Login";
 import { User } from "../helpers/secureStore/user";
 import { getStudyFileAsync } from "../helpers/studyFile";
-import { loginAsync, logoutAsync } from "../helpers/users";
+import { loginAsync } from "../helpers/users";
 
 // This is an ugly hack so that the init url won't pop up again if the user log
 // in and then immediately log out.
@@ -66,36 +67,46 @@ export default class LoginScreen extends React.Component<
   }
 
   handleUrl(url: Linking.ParsedURL) {
-    if (
-      url.hostname === "stanfordsocialneurosciencelab.github.io" ||
-      url.hostname === "wellping.github.io"
-    ) {
-      if (
-        (url.path === "WellPing/app/login" || url.path === "app/login") &&
-        url.queryParams &&
-        url.queryParams["code"]
-      ) {
-        const loginCode = decodeURIComponent(url.queryParams["code"]);
-
-        this.setState({ formData: loginCode });
-        Alert.alert(
-          "Hi there!",
-          `We have pre-filled your login information. Please click "OK" to log in.`,
-          [
-            {
-              text: "OK",
-              style: "cancel",
-              onPress: this.loginFnAsync,
-            },
-          ],
-        );
+    if (RELEASE) return; // Signed pilot builds use typed enrollment codes.
+    const isLoginLocation = (hostname: string | null, path: string | null) =>
+      (hostname === "stanfordsocialneurosciencelab.github.io" ||
+        hostname === "wellping.github.io") &&
+      (path === "WellPing/app/login" || path === "app/login");
+    // Expo returns the raw URL as path when query decoding fails. Recognize
+    // only our login locations, never display/log the private query string.
+    if (!url.hostname && url.path) {
+      try {
+        const raw = new URL(url.path);
+        if (isLoginLocation(raw.hostname, raw.pathname.replace(/^\//, ""))) {
+          this.setState({
+            errorText:
+              "This login link is invalid. Paste the code from your study team or contact them for a replacement.",
+          });
+        }
+      } catch (_) {
+        /* Unrelated or unrecognized link. */
       }
+      return;
+    }
+    if (isLoginLocation(url.hostname, url.path)) {
+      const code = url.queryParams?.["code"];
+      if (typeof code !== "string" || !code) return;
+      // Expo has already decoded query values. Do not decode credentials again.
+      this.setState({ formData: code, errorText: null });
+      Alert.alert(
+        "Hi there!",
+        `We have pre-filled your login information. Please click "OK" to log in.`,
+        [{ text: "OK", style: "cancel", onPress: this.loginFnAsync }],
+      );
     }
   }
 
   listenToUrlWhenForegroundHandler = (event: Linking.EventType) => {
     this.handleUrl(Linking.parse(event.url));
   };
+
+  linkingSubscription: ReturnType<typeof Linking.addEventListener> | null =
+    null;
 
   async componentDidMount() {
     // If LoginScreen is loaded, it means that the user haven't logged in yet.
@@ -106,11 +117,14 @@ export default class LoginScreen extends React.Component<
       this.handleUrl(await Linking.parseInitialURLAsync());
       firstTimeLoadingLoginScreen = false;
     }
-    Linking.addEventListener("url", this.listenToUrlWhenForegroundHandler);
+    this.linkingSubscription = Linking.addEventListener(
+      "url",
+      this.listenToUrlWhenForegroundHandler,
+    );
   }
 
   componentWillUnmount() {
-    Linking.removeEventListener("url", this.listenToUrlWhenForegroundHandler);
+    this.linkingSubscription?.remove();
   }
 
   async confirmAgeAsync(): Promise<boolean> {
@@ -140,6 +154,7 @@ export default class LoginScreen extends React.Component<
   }
 
   loginFnAsync = async () => {
+    if (this.state.disableLoginButton) return;
     this.setState({
       errorText: null,
       loadingText: null,
@@ -185,6 +200,7 @@ export default class LoginScreen extends React.Component<
     } catch (e) {
       this.setState({
         disableLoginButton: false,
+        loadingText: null,
         errorText: "Your login code is invalid. Please check it and try again.",
       });
       return;
@@ -194,34 +210,29 @@ export default class LoginScreen extends React.Component<
       loadingText: "Loading study data...",
     });
 
-    if (
-      !(await this.props.downloadAndParseStudyFileAsync({
+    let survey: Awaited<ReturnType<typeof getStudyFileAsync>>;
+    let error: string | null = null;
+    try {
+      const downloaded = await this.props.downloadAndParseStudyFileAsync({
         url: studyFileURL,
         user,
         isRedownload: false,
         handleNetworkErrorAsync: async (errorMessage) => {
-          this.setState({
-            errorText: errorMessage,
-            disableLoginButton: false,
-          });
+          this.setState({ errorText: errorMessage });
         },
-      }))
-    ) {
-      // We don't have to set `disableLoginButton` here because the page
-      // will be unmounted anyway (to show stuty file error page).
-      return;
-    }
-
-    const survey = await getStudyFileAsync();
-
-    this.setState({
-      loadingText: "Authenticating...",
-    });
-
-    let error: string | null = null;
-    try {
+      });
+      if (!downloaded) {
+        this.setState({ loadingText: null, disableLoginButton: false });
+        return;
+      }
+      survey = await getStudyFileAsync();
+      this.setState({ loadingText: "Authenticating..." });
       await loginAsync(user, survey.studyInfo);
-    } catch (e) {
+      await completePendingEnrollmentAsync();
+    } catch (_) {
+      // This attempt has no established research owner. General logout reads
+      // owner-scoped data and must never be used as failed-enrollment cleanup.
+      // Keep the pending receipt/configuration for safe retry after a restart.
       error =
         "Unable to authenticate. Check your login code or contact the study staff.";
     }
@@ -239,7 +250,7 @@ export default class LoginScreen extends React.Component<
             text: "Review",
             onPress: async () => {
               await WebBrowser.openBrowserAsync(
-                survey.studyInfo.consentFormUrl,
+                survey!.studyInfo.consentFormUrl,
               );
 
               this.setState(
@@ -259,8 +270,8 @@ export default class LoginScreen extends React.Component<
         { cancelable: false },
       );
     } else {
-      await logoutAsync();
       this.setState({
+        loadingText: null,
         errorText: error,
         disableLoginButton: false,
       });
@@ -296,15 +307,24 @@ export default class LoginScreen extends React.Component<
             Welcome to Well Ping!
           </Text>
           <Text style={{ fontSize: 20 }}>
-            Please log in using the login code sent to you.
+            Use the private login code sent by your study team. Do not share
+            this code.
           </Text>
         </View>
+        <Text style={{ marginBottom: 16 }}>
+          After setup, survey responses can be saved on this device while
+          offline. Check the sync status before removing the app. Notifications
+          are reminders; follow your study team’s instructions about when to
+          respond.
+        </Text>
         <TextInput
+          accessibilityLabel="Private study login code"
+          accessibilityHint="Paste the code provided by your study team."
           onChangeText={(text) => this.setState({ formData: text })}
           value={this.state.formData}
           autoCorrect={false}
           autoCapitalize="none"
-          autoCompleteType="off"
+          autoComplete="off"
           placeholder="Paste your login code here…"
           multiline
           textAlignVertical="top" // https://reactnative.dev/docs/textinput#multiline
@@ -334,12 +354,14 @@ export default class LoginScreen extends React.Component<
               borderWidth: 1,
             }}
           >
-            <Text style={{ fontWeight: "bold" }}>
+            <Text accessibilityRole="alert" style={{ fontWeight: "bold" }}>
               {`A problem occurred! Please review the error log below. ` +
                 `If necessary, please press the "Share Error" button at the ` +
                 `bottom and send the error log to the research staff.`}
             </Text>
-            <Text style={{ marginTop: 20 }}>{errorText}</Text>
+            <Text accessibilityLiveRegion="polite" style={{ marginTop: 20 }}>
+              {errorText}
+            </Text>
             <Button
               onPress={async () => {
                 await shareDebugTextAsync(errorText);
@@ -351,6 +373,7 @@ export default class LoginScreen extends React.Component<
         {loadingText && !errorText ? (
           <View style={{ marginTop: 10 }}>
             <Text
+              accessibilityLiveRegion="polite"
               style={{
                 fontWeight: "bold",
                 textAlign: "center",

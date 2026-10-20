@@ -1,70 +1,54 @@
-# Reproducible local development
+# Modern local development
 
-This is a reproducible **legacy Expo 44 development baseline**, not a production release upgrade. Node 16 and Expo CLI 5 are old toolchains retained here to avoid changing survey behavior during setup repair. Use synthetic data only, keep the server on localhost, and modernize Expo/React Native in a separate change before a new release.
+This branch targets Expo 57.0.30, React Native 0.86.3 and React 19.2.3. It is a development candidate for the first study, not a participant release.
 
 ## Install and verify
 
-Requirements: Node **16.20.2** (`.nvmrc`), Git, and registry access for the first install. Yarn **3.1.1** is checked into the repository; no global Yarn, Expo CLI, EAS CLI, login, signing credentials, or research backend is needed. With nvm already installed:
+Use Node **22.23.3** (`.nvmrc`). Its bundled Corepack selects **Yarn 4.18.1** from `package.json`; no global Expo CLI is needed. The first install needs registry access.
 
 ```sh
 nvm install
 nvm use
 node scripts/check-environment.cjs
-node .yarn/releases/yarn-3.1.1.cjs install --immutable
-node .yarn/releases/yarn-3.1.1.cjs test:ci
-node .yarn/releases/yarn-3.1.1.cjs smoke:local
+corepack yarn install --immutable
+corepack yarn test:ci
+corepack yarn smoke:local
 ```
 
-Yarn metadata and caches stay inside ignored `.yarn/` directories by default. Use these commands instead of `npm install` or a global Expo CLI. The checked-in Yarn can also be called as `yarn` when your package-manager shim honors `packageManager` in `package.json`.
+The lockfile and vendored original study schema are checked in. Dependency lifecycle scripts remain disabled. `test:ci` type-checks the app, runs survey and storage regression tests, and runs the five security scripts. `smoke:local` compiles both mobile JavaScript bundles into a temporary directory, checks the local app identities and disabled updates, verifies production enrollment is absent, and removes the output. It also starts a temporary localhost server and checks both native manifests and the reachable bundle host before shutting it down. It does not run a phone or simulator.
 
-`test:ci` runs the TypeScript check, Jest serially with Watchman disabled, and four synthetic security regression scripts. `smoke:local` starts a temporary local server on port 19800, checks its isolated manifest, compiles iOS and Android JavaScript bundles, and shuts down that server and its child processes. It does not run an emulator or publish a build. Set `WELLPING_SMOKE_PORT` to another free port if necessary.
-
-The schema is now a checked-in artifact built from the original locked Git commit; see [artifact provenance](../vendor/README.md). Do **not** set `YARN_CHECKSUM_BEHAVIOR=update` or disable immutable installs. `.yarnrc.yml` disables dependency lifecycle scripts: this JS workflow does not need sqlite3 compilation, native filesystem-watch builds, or install-time downloads. Native build requirements must be reviewed separately when modernizing the app.
-
-## Run the synthetic survey
+## Preview the existing questionnaire
 
 ```sh
-node .yarn/releases/yarn-3.1.1.cjs start:local
+corepack yarn start:local
 ```
 
-The server prints its local address, normally `exp://127.0.0.1:19000`. Keep the terminal running; Ctrl+C stops it. This portable runner uses Metro's CI/no-watch mode, so **restart the server after editing files**. It needs no Watchman. CLI state is stored in ignored `.expo/local-cli`, and telemetry/account checks are disabled.
+The app opens the existing 16-question social-interaction questionnaire, preserving its wording, branching, and answer codes. Use fictitious names and answers. After finishing, you can switch to the shorter two-question fixture. Saved progress and answers are separated by questionnaire and from ordinary app storage.
 
-The screen says **“Well Ping — synthetic local test”**. It exercises the app's actual survey renderer and persistence with two artificial questions. Answer, finish, reopen, or start another test survey. Completion explicitly says the data stayed on the test device. Reload after reaching the second question to check resume behavior. The initial question is also saved before the screen mounts.
+The local app has no enrollment, notification scheduling, dashboard, or upload flow. Its study envelope has no backend and uses `example.invalid` for unused links. Application fetch calls are rejected. It uses `app.wellping.local` on both platforms and disables over-the-air updates and production deep links.
 
-The local entry does not render enrollment, consent links, dashboards, scheduling, or upload flows. Its fixture has no backend, external images, or dashboard, and its unused schema-required URLs point to `example.invalid`. Application `fetch` calls are rejected. AsyncStorage study/index/installation keys and SecureStore keys have separate local prefixes; the test harness verifies that synthetic sentinels in normal-app keys remain unchanged. App slug and native identifiers differ from production, OTA updates are disabled, and production deep-link registrations are removed in this mode.
+The server uses localhost, normally port 8081, with watchers disabled for portability. Restart it after editing. The URL is for an installed native development client, not a browser survey. Use a development build matching this branch, rather than relying on Expo Go.
 
-`yarn start`, `yarn ios`, and `yarn android` retain the normal app entry. They are **not** the isolated synthetic workflow. An ordinary development build can still use a real backend if given real configuration. Do not use participant login codes or a participant's device for local testing.
+## Build and run a native development client
 
-## Viewing on a native client
+These commands generate disposable native projects from the Expo configuration. Generated `ios/` and `android/` directories are ignored; regenerate after configuration/dependency changes. All local commands must retain `WELLPING_LOCAL_ONLY=1` (the scripts set it).
 
-This application is native iOS/Android; the localhost URL is not a browser-based survey. You need a client compatible with **Expo SDK 44**:
+```sh
+# macOS, full Xcode 26.4+ selected, iOS simulator and CocoaPods installed:
+corepack yarn ios:local
 
-- With a compatible iOS simulator installed, start the local runner with `--ios`. This machine currently has only Xcode Command Line Tools, so a simulator could not be launched here.
-- With an Android emulator and compatible client installed, use `--android`. For a dedicated Android test device connected through USB, localhost access requires forwarding the Expo ports with Android tooling (normally 19000 and 19001), then opening the printed `exp://` URL.
-- Current Expo Go does not generally support this old SDK. Consult [Expo's version-specific clients](https://expo.dev/go) and [upgrade guidance](https://docs.expo.dev/workflow/upgrading-expo-sdk-walkthrough/). Availability varies by platform; do not assume a current iPhone can run SDK 44. If no compatible client is available, complete an incremental SDK migration or an explicitly authorized isolated development build before device testing.
+# Java 17 and Android Studio/SDK installed, emulator running or USB phone attached:
+corepack yarn android:local
+```
 
-Bundling and mocked renderer tests are useful checks, but do not establish SecureStore durability on a real device, notification delivery, or native compatibility. The synthetic runner intentionally does not test actual delivery or backend uploads. No native screenshots are available from this setup.
+For a USB Android phone, use `adb reverse tcp:8081 tcp:8081` to reach localhost. A physical iPhone needs Apple signing and a reachable development server; the localhost runner is intended for the simulator. The `development`/`preview` EAS profiles contain local test builds. The guarded `staging`/`production` profiles require the lab inputs in the [release runbook](release/deployment.md); cloud account/project setup and physical iPhone signing remain external prerequisites. The previous production submission profile was removed because it referenced the original app's store account.
 
-## What was verified
+Native project generation and JavaScript compilation are separate from a successful native build. This Mac currently has only Xcode Command Line Tools, no full Xcode, Java runtime, or Android SDK. GitHub-hosted native builds now compile the standalone Android APK and iOS simulator app; see [device testing](device-testing.md) for artifacts and verification results. Installation, notifications and storage behavior on physical phones remain to be verified.
 
-On macOS arm64, using the pinned runtime:
+## Verification and limitations
 
-- A fresh copy with **empty dependency/global caches** passed `install --immutable` with standard checksum enforcement; the lockfile SHA-256 was unchanged.
-- TypeScript, **254 tests in 15 suites**, and **282 snapshots** passed; local-runner tests cover completion, saved responses after reopening, unfinished-survey resume, separate storage, and no fetch/notification scheduling.
-- Both platform manifests identify `local/index.js`, local mode, and disabled updates. iOS and Android JavaScript bundles compiled successfully.
-- Existing app dependency resolutions were compared against the starting lockfile and remained unchanged. The larger lockfile diff is predominantly the project-local legacy Expo CLI and its dependencies, plus the schema source replacement.
+The Expo 54 compatibility checkpoint passed 254 tests and 282 snapshots before moving to Expo 57. The target framework passes the original regression suite and security checks; additional tests cover the existing questionnaire and isolated saved progress. Both local and ordinary application JavaScript graphs compile for iOS and Android. Native projects generate successfully for both platforms.
 
-CI now selects the pinned Node version, enforces the lockfile, runs the tests, and runs the same bundle smoke check. Hosted CI and device validation should be checked on the PR; the local results above do not claim a native release build.
+Tests mock native storage and notifications. They do not establish device durability, delivery timing, study-server behavior, or app-store acceptance. Review the current PR results and [December readiness plan](december-readiness.md) before enrollment. Existing React test warnings about asynchronous updates remain visible; they are not suppressed.
 
-## Troubleshooting
-
-| Symptom | Action |
-| --- | --- |
-| `QO.isDate is not a function` or newer-Node CLI warning | Run `node scripts/check-environment.cjs`; select `.nvmrc`'s Node version. Do not upgrade dependencies merely to bypass this error. |
-| Missing node_modules state file | Run the immutable install from the project root using the pinned Node and checked-in Yarn. |
-| Unwritable package-manager cache in an isolated environment | Set `YARN_GLOBAL_FOLDER` to a writable temporary directory. For an independent cold-cache check, also set `YARN_CACHE_FOLDER` to an empty temporary directory. |
-| `EMFILE: too many open files, watch` | Use `start:local`, which disables Metro watchers. Do not run the legacy global CLI directly. |
-| Server cannot bind a port | Allow localhost binding in the development sandbox and choose a free `--port`. The smoke command uses `WELLPING_SMOKE_PORT`. |
-| Offline manifest icon/schema warning | The legacy CLI may report an unavailable cached Expo schema/icon refresh. This is separate from the app bundle; confirm the manifest entry/flags and bundle checks succeed. |
-
-The security backport adds verified secure resume snapshots, recovery retry, and guarded logout; see [PR reconciliation](pr-reconciliation.md). Remaining priorities include idempotent uploads and an incremental SDK migration. Do not merge or release solely because JavaScript tests and bundling succeed.
+If a command reports a Node mismatch, select `.nvmrc`. If dependencies are missing, rerun the immutable install. If a lockfile update is requested unexpectedly, stop and investigate rather than disabling immutability or checksum validation.

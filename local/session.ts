@@ -1,3 +1,4 @@
+import { getLocalFixture, getLocalStream, Questionnaire } from "./fixtures";
 import { IS_LOCAL_DEVELOPMENT } from "../config/local";
 import {
   getPingStateAsync,
@@ -14,14 +15,18 @@ import {
   parseAndStoreStudyFileAsync,
 } from "../src/helpers/studyFile";
 
-export async function openSyntheticSession(startAnother = false) {
+export async function openSyntheticSession(
+  startAnother = false,
+  questionnaire: Questionnaire = "quick",
+) {
   if (!IS_LOCAL_DEVELOPMENT)
     throw new Error("Local configuration is required.");
   const error = await parseAndStoreStudyFileAsync(
-    JSON.stringify(require("./synthetic-study.json")),
+    JSON.stringify(getLocalFixture(questionnaire)),
   );
   if (error) throw new Error(error);
   const study = await getStudyFileAsync();
+  const streamName = getLocalStream(questionnaire);
   if (!(await secureGetUserAsync())) {
     await secureStoreUserAsync({
       username: "synthetic",
@@ -38,13 +43,13 @@ export async function openSyntheticSession(startAnother = false) {
     ping = await insertPingAsync({
       notificationTime: new Date(Date.now() - 1000),
       startTime: new Date(),
-      streamName: "synthetic",
+      streamName,
     });
     await addToUnuploadedPingsListIfNeededAsync(ping);
     // Make the first screen resumable even before React mounts it.
     await storePingStateAsync(ping.id, {
       currentQuestionData: {
-        questionId: study.studyInfo.streamsStartingQuestionIds.synthetic,
+        questionId: study.studyInfo.streamsStartingQuestionIds[streamName],
         extraData: {},
       },
       nextQuestionsDataStack: [],
@@ -52,5 +57,5 @@ export async function openSyntheticSession(startAnother = false) {
       isInTransition: false,
     });
   }
-  return { study, ping, previousState };
+  return { study, ping, previousState, streamName };
 }

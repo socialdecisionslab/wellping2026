@@ -1,4 +1,5 @@
 import {
+  Answer,
   AnswerData,
   AnswersList,
 } from "@wellping/study-schemas/lib/answerTypes";
@@ -8,6 +9,7 @@ export type DataValidationFunction = () => boolean;
 
 export interface QuestionScreenProps {
   question: Question;
+  initialAnswer?: Answer;
   loadingCompleted: () => void;
   onDataChange: (data: AnswerData) => void;
   allAnswers: AnswersList;

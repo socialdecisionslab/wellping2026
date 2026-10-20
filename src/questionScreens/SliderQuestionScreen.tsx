@@ -27,6 +27,7 @@ interface SliderQuestionScreenProps extends QuestionScreenProps {
 
 const SliderQuestionScreen: React.ElementType<SliderQuestionScreenProps> = ({
   question,
+  initialAnswer,
   loadingCompleted,
   onDataChange,
   allAnswers,
@@ -37,8 +38,13 @@ const SliderQuestionScreen: React.ElementType<SliderQuestionScreenProps> = ({
     loadingCompleted();
   }, []);
 
-  let defaultSliderValue = getQuestionDefaultSliderValue(question);
-  if (question.defaultValueFromQuestionId) {
+  const [savedSliderValue] = React.useState(() => {
+    const savedValue = initialAnswer?.data?.value;
+    return typeof savedValue === "number" ? savedValue : null;
+  });
+  let defaultSliderValue =
+    savedSliderValue ?? getQuestionDefaultSliderValue(question);
+  if (savedSliderValue === null && question.defaultValueFromQuestionId) {
     const prevQuestionAnswer = allAnswers[
       pipeInExtraMetaData(question.defaultValueFromQuestionId)
     ] as SliderAnswer;
@@ -64,7 +70,7 @@ const SliderQuestionScreen: React.ElementType<SliderQuestionScreenProps> = ({
 
   // This value is for display only - it should not be used for anything else.
   const [__FOR_DISPLAY_ONLY__sliderValue, __FOR_DISPLAY_ONLY__setSliderValue] =
-    React.useState<number | null>(null);
+    React.useState<number | null>(savedSliderValue);
 
   return (
     <View style={{ paddingVertical: 30 }}>

@@ -17,7 +17,7 @@ test("local runner uses a separate entry, identifiers, and no OTA or deep links"
   process.env.WELLPING_LOCAL_ONLY = "1";
   try {
     const local = configure({ config: production });
-    expect(local.entryPoint).toBe("./local/index.js");
+    expect(local.scheme).toBe("wellping-local");
     expect(local.extra.wellpingLocalOnly).toBe(true);
     expect(local.updates.enabled).toBe(false);
     expect(local.owner).toBeUndefined();
@@ -28,7 +28,7 @@ test("local runner uses a separate entry, identifiers, and no OTA or deep links"
     expect(local.android.package).not.toBe(production.android.package);
     expect(local.ios.associatedDomains).toEqual([]);
     expect(local.android.intentFilters).toEqual([]);
-    expect(production.updates.enabled).toBe(true);
+    expect(production.updates.enabled).toBe(false);
   } finally {
     if (previous === undefined) delete process.env.WELLPING_LOCAL_ONLY;
     else process.env.WELLPING_LOCAL_ONLY = previous;

@@ -1,0 +1,50 @@
+name: iPhone simulator smoke test
+on:
+  workflow_call:
+    inputs:
+      reviewed-sha:
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  launch:
+    runs-on: macos-26
+    timeout-minutes: 30
+    env:
+      REVIEWED_SHA: ${{ inputs.reviewed-sha }}
+      DEVELOPER_DIR: /Applications/Xcode_26.4.1.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+          ref: ${{ inputs.reviewed-sha }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: Well-Ping-Local-iOS-Simulator
+          path: preview
+      - name: Verify same-run artifact and exact source
+        run: bash scripts/native/build-identity.sh verify preview
+      - name: Unpack simulator app
+        run: |
+          mkdir -p build/ios/Build/Products/Release-iphonesimulator
+          unzip -q preview/Well-Ping-Local-Simulator.zip -d build/ios/Build/Products/Release-iphonesimulator
+      - name: Launch and reopen in iPhone simulator
+        run: bash scripts/smoke-ios.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: iPhone-simulator-test-evidence
+          path: |
+            preview/tested-build.json
+            ios-first-launch.png
+            ios-reopen.png
+            simulator-processes.txt
+            simulator-launch.log
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Well-Ping-Local-Tested-iOS-Simulator
+          path: Well-Ping-Local-Tested-Simulator.zip
+          if-no-files-found: error
+          retention-days: 14

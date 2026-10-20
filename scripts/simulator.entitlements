@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <!-- Simulator-only identity. Never use this file for a physical-device build. -->
+  <key>application-identifier</key><string>LOCALTEST1.app.wellping.local</string>
+  <key>keychain-access-groups</key><array><string>LOCALTEST1.app.wellping.local</string></array>
+</dict></plist>
