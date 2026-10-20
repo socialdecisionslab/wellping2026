@@ -1,4 +1,8 @@
 import {
+  COMPLETION_EVENT_KEY,
+  completionRequestedAt,
+} from "./helpers/terminalCompletion";
+import {
   Answer,
   AnswerData,
   AnswersList,
@@ -80,7 +84,6 @@ import SliderQuestionScreen from "./questionScreens/SliderQuestionScreen";
  */
 type ExtraData = { [key: string]: any };
 
-const COMPLETION_EVENT_KEY = "__wellpingCompletionEvent";
 function recoveryCode(error: unknown): string | undefined {
   return error !== null && typeof error === "object" && "code" in error
     ? String(error.code)
@@ -334,7 +337,12 @@ export default class SurveyScreen extends React.Component<
       ? savedPing
       : await addEndTimeToPingAsync(
           savedPing.id,
-          this.completionRequestedAt(savedPing),
+          completionRequestedAt(
+            savedPing,
+            this.committedState,
+            this.expectedOwnerId,
+            this.props.questions,
+          ),
           this.expectedOwnerId,
         );
     if (this.unmounted) return;
@@ -342,41 +350,6 @@ export default class SurveyScreen extends React.Component<
     if (this.unmounted) return;
     this.completionDelivered = true;
     this.props.onFinish(finishedPing);
-  }
-
-  private completionRequestedAt(ping: Ping): Date {
-    const event =
-      this.committedState.currentQuestionData.extraData[COMPLETION_EVENT_KEY];
-    // Older snapshots did not preserve the click time. Do not invent an earlier
-    // time for them; the journal still enforces the original protocol deadline.
-    if (event === undefined) return new Date();
-    const date = new Date(event?.requestedAt);
-    if (
-      event === null ||
-      typeof event !== "object" ||
-      event.version !== 1 ||
-      event.ownerId !== this.expectedOwnerId ||
-      event.pingId !== ping.id ||
-      typeof event.questionId !== "string" ||
-      !Object.prototype.hasOwnProperty.call(
-        this.props.questions,
-        event.questionId,
-      ) ||
-      typeof event.requestedAt !== "string" ||
-      !Number.isFinite(date.getTime()) ||
-      date.toISOString() !== event.requestedAt ||
-      date.getTime() < ping.startTime.getTime() ||
-      date.getTime() > Date.now() ||
-      this.committedState.nextQuestionsDataStack.length !== 0
-    ) {
-      throw Object.assign(
-        new Error("Invalid terminal completion event; data preserved."),
-        {
-          code: "INVALID_COMPLETION_EVENT",
-        },
-      );
-    }
-    return date;
   }
 
   componentDidMount() {

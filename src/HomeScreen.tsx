@@ -1,3 +1,4 @@
+import { recoverTerminalCompletionsAsync } from "./helpers/terminalCompletion";
 import {
   Ping,
   StreamName,
@@ -37,6 +38,7 @@ import {
 import { getUnuploadedPingsListAsync } from "./helpers/asyncStorage/unuploadedPingsList";
 import { waitForPendingSurveySavesAsync } from "./helpers/surveyAnswerWrites";
 import {
+  getJournalInsertionAsync,
   isJournalPingActiveAsync,
   captureCurrentDataOwnerAsync,
   assertDataOwnerAsync,
@@ -409,6 +411,8 @@ export default class HomeScreen extends React.Component<
     this.assertHomeGeneration(generation);
     this.expiryTransitionRequested = false;
     this.setState({ expirySavePending: false, expirySaveError: false });
+    await recoverTerminalCompletionsAsync(this.props.streams);
+    this.assertHomeGeneration(generation);
     const latestPing = await getLatestPingAsync();
     this.assertHomeGeneration(generation);
     const allowsNotifications = await setupNotificationsPermissionAsync();
@@ -569,8 +573,27 @@ export default class HomeScreen extends React.Component<
     const pingsList = await getPingsListAsync();
     const newPingNth = pingsList.length + 1;
 
+    let futurePingIfAny = await peekFuturePingIfAny(owner.id);
+    let reservedPing: Ping | null = null;
+    while (futurePingIfAny) {
+      reservedPing = await getJournalInsertionAsync(
+        futurePingIfAny.operationId, owner.id,
+      );
+      if (
+        !reservedPing ||
+        +reservedPing.notificationTime === +this.state.currentNotificationTime!
+      ) break;
+      // The insertion already committed in an earlier window. Acknowledge that
+      // reservation independently of which stream the current window selects.
+      await acknowledgeFuturePingAsync(futurePingIfAny.operationId, owner.id);
+      futurePingIfAny = await peekFuturePingIfAny(owner.id);
+      reservedPing = null;
+    }
     let newStreamName: StreamName;
-    if (todayPings.length >= studyInfo.pingsFrequency.length) {
+    if (reservedPing && futurePingIfAny) {
+      newStreamName = reservedPing.streamName;
+      followupOperationId = futurePingIfAny.operationId;
+    } else if (todayPings.length >= studyInfo.pingsFrequency.length) {
       await alertWithShareButtonContainingDebugInfoAsync(
         getNonCriticalProblemTextForUser(
           `todayPings.length (${todayPings.length}) >= ${studyInfo.pingsFrequency.length}`,
@@ -591,7 +614,6 @@ export default class HomeScreen extends React.Component<
           newStreamName,
         )
       ) {
-        const futurePingIfAny = await peekFuturePingIfAny(owner.id);
         if (futurePingIfAny) {
           newStreamName = futurePingIfAny.streamName;
           followupOperationId = futurePingIfAny.operationId;

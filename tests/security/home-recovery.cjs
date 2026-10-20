@@ -76,6 +76,7 @@ function load(file, overrides = {}) {
       getCurrentNotificationTimeAsync: async () => null,
       clearSentNotificationsAsync: async () => {},
     },
+    "./helpers/terminalCompletion": { recoverTerminalCompletionsAsync: async () => {} },
     "./helpers/pings": { getLatestPingAsync: async () => null },
     "./helpers/server": { isUsingFirebase: () => false },
     "./helpers/debug": {
@@ -279,6 +280,7 @@ async function lifecycleRegressions() {
       getCurrentNotificationTimeAsync: () => currentTime(),
       clearSentNotificationsAsync: async () => {},
     },
+    "./helpers/terminalCompletion": { recoverTerminalCompletionsAsync: async () => {} },
     "./helpers/pings": { getLatestPingAsync: () => latest() },
     "./helpers/dataJournal": { isJournalPingActiveAsync: () => active() },
     "./helpers/asyncStorage/pingState": {

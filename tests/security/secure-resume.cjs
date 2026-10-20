@@ -989,6 +989,12 @@ async function resumeBehavior() {
     },
   };
   const exports = {};
+  const terminalExports = {};
+  vm.runInNewContext(ts.transpileModule(
+    fs.readFileSync(path.join(__dirname, "../../src/helpers/terminalCompletion.ts"), "utf8"),
+    { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } },
+  ).outputText, { exports: terminalExports, require: () => ({}), Date });
+  stubs["./helpers/terminalCompletion"] = terminalExports;
   const source = ts.transpileModule(
     fs.readFileSync(path.join(__dirname, "../../src/SurveyScreen.tsx"), "utf8"),
     {

@@ -1,3 +1,4 @@
+import { recoverTerminalCompletionsAsync } from "./helpers/terminalCompletion";
 import { getPingsAsync } from "./helpers/pings";
 import { isJournalPingActiveAsync } from "./helpers/dataJournal";
 import { waitForPendingSurveySavesAsync } from "./helpers/surveyAnswerWrites";
@@ -145,6 +146,7 @@ export default class RootScreen extends React.Component<
       return true;
     }
     await waitForPendingSurveySavesAsync();
+    await recoverTerminalCompletionsAsync((await getStudyFileAsync()).streams);
     for (const ping of await getPingsAsync()) {
       if (await isJournalPingActiveAsync(ping.id)) return true;
     }

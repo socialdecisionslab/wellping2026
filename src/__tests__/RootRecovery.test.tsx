@@ -1,3 +1,4 @@
+jest.mock("../helpers/terminalCompletion", () => ({ recoverTerminalCompletionsAsync: jest.fn().mockResolvedValue(undefined) }));
 import React from "react";
 import { render, waitFor, screen } from "@testing-library/react-native";
 import RootScreen from "../RootScreen";

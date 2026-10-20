@@ -1023,6 +1023,18 @@ export function getJournalPingExpiryAsync(
     return expiry === null ? null : new Date(expiry);
   }, expectedOwnerId);
 }
+export function getJournalInsertionAsync(
+  operationId: string,
+  expectedOwnerId: string,
+): Promise<Ping | null> {
+  return run(
+    (context, index) =>
+      own(index.insertions, operationId)
+        ? getPing(context, index, index.insertions[operationId])
+        : Promise.resolve(null),
+    expectedOwnerId,
+  );
+}
 export function getJournalPingAsync(
   pingId: string,
   expectedOwnerId?: string,

@@ -1,3 +1,4 @@
+jest.mock("../../helpers/terminalCompletion", () => ({ recoverTerminalCompletionsAsync: jest.fn().mockResolvedValue(undefined) }));
 jest.mock("../../HomeScreen", () => "HomeScreen");
 jest.mock("../../screens/LoginScreen", () => "LoginScreen");
 import RootScreen from "../../RootScreen";
@@ -14,6 +15,7 @@ jest.mock("../../helpers/dataJournal", () => ({
 }));
 jest.mock("../../helpers/studyFile", () => ({
   parseAndStoreStudyFileAsync: jest.fn(),
+  getStudyFileAsync: jest.fn().mockResolvedValue({ streams: {} }),
 }));
 jest.mock("../../helpers/asyncStorage/tempStudyFile", () => ({
   getTempStudyFileAsync: jest.fn(),
