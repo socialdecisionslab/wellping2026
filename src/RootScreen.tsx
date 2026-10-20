@@ -1,3 +1,6 @@
+import { getPingsAsync } from "./helpers/pings";
+import { isJournalPingActiveAsync } from "./helpers/dataJournal";
+import { waitForPendingSurveySavesAsync } from "./helpers/surveyAnswerWrites";
 import { StudyFile } from "@wellping/study-schemas/lib/types";
 import React from "react";
 import { Button, Text, View } from "react-native";
@@ -131,6 +134,10 @@ export default class RootScreen extends React.Component<
     const tempStudyFile = await getTempStudyFileAsync();
     if (tempStudyFile === null) {
       return true;
+    }
+    await waitForPendingSurveySavesAsync();
+    for (const ping of await getPingsAsync()) {
+      if (await isJournalPingActiveAsync(ping.id)) return true;
     }
     const error = await parseAndStoreStudyFileAsync(tempStudyFile);
     if (error === null) await clearTempStudyFileAsync();

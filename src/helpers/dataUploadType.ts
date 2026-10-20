@@ -1,3 +1,7 @@
+export type UploadRevisions = Record<
+  string,
+  { revision: number; studyVersion: string | null }
+>;
 import { Answer } from "@wellping/study-schemas/lib/answerTypes";
 import { Ping } from "@wellping/study-schemas/lib/types";
 
@@ -11,6 +15,9 @@ export type UserData = {
 
 export interface UploadData {
   user: UserData;
+  studyId?: string;
+  revisions?: UploadRevisions;
+  receipt?: string;
 }
 export interface AllData extends UploadData {
   pings: Ping[];

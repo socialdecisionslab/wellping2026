@@ -4,24 +4,30 @@ on:
   push:
     branches: [codex/modernize-mobile-runtime]
     paths:
-      - '.github/workflows/native-preview.yml'
-      - 'scripts/native/**'
-      - 'scripts/simulator.entitlements'
-      - 'app.config.js'
-      - 'app.json'
-      - 'package.json'
-      - 'yarn.lock'
-      - 'local/**'
-      - 'src/**'
+      - ".github/workflows/native-preview.yml"
+      - "scripts/native/**"
+      - "scripts/simulator.entitlements"
+      - "config/**"
+      - "App.tsx"
+      - "index.js"
+      - "metro.config.js"
+      - "babel.config.js"
+      - "vendor/**"
+      - "app.config.js"
+      - "app.json"
+      - "package.json"
+      - "yarn.lock"
+      - "local/**"
+      - "src/**"
 permissions:
   contents: read
 concurrency:
   group: native-preview-${{ github.ref }}
   cancel-in-progress: true
 env:
-  WELLPING_LOCAL_ONLY: '1'
-  EXPO_NO_TELEMETRY: '1'
-  CI: '1'
+  WELLPING_LOCAL_ONLY: "1"
+  EXPO_NO_TELEMETRY: "1"
+  CI: "1"
 jobs:
   android:
     runs-on: ubuntu-24.04
@@ -34,7 +40,7 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: "17"
       - run: corepack yarn install --immutable
       - name: Generate isolated Android project
         run: corepack yarn expo prebuild --platform android --no-install

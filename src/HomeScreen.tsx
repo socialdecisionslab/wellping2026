@@ -17,6 +17,7 @@ import {
   Alert,
   AppState,
   AppStateStatus,
+  Platform,
   Button,
   Text,
   View,
@@ -98,6 +99,7 @@ interface HomeScreenState {
   firebaseUser: FirebaseUser | null;
 
   resumeError: boolean;
+  syncStatus: "checking" | "pending" | "uploading" | "uploaded";
   startupError?: boolean;
   expiredIncomplete?: boolean;
   expirySavePending?: boolean;
@@ -121,6 +123,7 @@ export default class HomeScreen extends React.Component<
       currentPing: null,
       isLoading: true,
       resumeError: false,
+      syncStatus: "checking",
       storedPingStateAsync: null,
       uploadStatusSymbol: HOME_SCREEN_DEBUG_VIEW_SYMBOLS.UPLOAD.INITIAL,
       firebaseUser: null,
@@ -203,10 +206,27 @@ export default class HomeScreen extends React.Component<
       nextAppState === "active"
     ) {
       // App has come to the foreground.
-      this.checkIfPingHasExpiredAsync();
+      void this.refreshOnForegroundAsync();
     }
     this.setState({ appState: nextAppState });
   };
+
+  async refreshOnForegroundAsync() {
+    try {
+      const permission = await Notifications.getPermissionsAsync();
+      const allowed =
+        Platform.OS === "ios"
+          ? !!permission.ios?.allowsAlert
+          : permission.granted;
+      if (allowed && !this.state.allowsNotifications)
+        await setNotificationsAsync();
+      this.setState({ allowsNotifications: allowed });
+      await this.checkIfPingHasExpiredAsync();
+      await this._uploadUnuploadedDataAndRemoveFromThemIfSuccessfulAsync();
+    } catch (_) {
+      this.setState({ syncStatus: "pending" });
+    }
+  }
 
   notificationResponseReceivedListener: ReturnType<
     typeof Notifications.addNotificationResponseReceivedListener
@@ -353,6 +373,7 @@ export default class HomeScreen extends React.Component<
     }
 
     this.setState({ isLoading: false });
+    void this._uploadUnuploadedDataAndRemoveFromThemIfSuccessfulAsync();
 
     if (studyInfo.specialAlertOnLaunch) {
       Alert.alert(
@@ -476,18 +497,25 @@ export default class HomeScreen extends React.Component<
     try {
       await waitForPendingSurveySavesAsync();
     } catch (error) {
-      this.setState({ expirySaveError: true });
+      this.setState({ expirySaveError: true, syncStatus: "pending" });
       await doAfterErrorAsync(error);
       doFinally();
       return;
     }
+    this.setState({ syncStatus: "uploading" });
     return uploadDataAsync(studyInfo, this.setUploadStatusSymbol, {
       unuploadedOnly: true,
     })
       .then(async (response) => {
+        this.setState({
+          syncStatus: (await getUnuploadedPingsListAsync()).length
+            ? "pending"
+            : "uploaded",
+        });
         await doAfterResponseAsync(response);
       })
       .catch(async (e) => {
+        this.setState({ syncStatus: "pending" });
         // There's some error in uploading.
         // Do nothing (keep the unuploaded pings list unmodified).
 
@@ -529,6 +557,7 @@ export default class HomeScreen extends React.Component<
 
     this.setState({
       currentPing: newPing,
+      syncStatus: "pending",
       storedPingStateAsync: null,
     });
   }
@@ -630,6 +659,25 @@ export default class HomeScreen extends React.Component<
     // Diagnostics and data-export controls are intentionally absent from the app.
     const ExtraView = (
       <View>
+        <Text accessibilityLiveRegion="polite">
+          {this.state.expirySaveError
+            ? "Some responses still need saving. Please retry."
+            : this.state.syncStatus === "uploaded"
+            ? "Saved on device · Uploaded"
+            : this.state.syncStatus === "uploading"
+            ? "Saved on device · Uploading…"
+            : this.state.syncStatus === "pending"
+            ? "Saved on device · Upload pending"
+            : "Checking saved responses…"}
+        </Text>
+        {this.state.syncStatus === "pending" && (
+          <Button
+            title="Retry upload"
+            onPress={() => {
+              void this._uploadUnuploadedDataAndRemoveFromThemIfSuccessfulAsync();
+            }}
+          />
+        )}
         {this.state.expiredIncomplete && (
           <Text accessibilityRole="alert">
             An earlier survey window ended before completion. Its saved

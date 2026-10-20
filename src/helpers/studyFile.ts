@@ -1,3 +1,5 @@
+import { RELEASE } from "../../config/release";
+import { requestTextAsync } from "./http";
 import { StudyFileSchema } from "@wellping/study-schemas/lib/schemas/StudyFile";
 import {
   StudyFile,
@@ -90,9 +92,11 @@ export async function downloadStudyFileAsync({
   getHttpsOrigin(url);
 
   if (
-    !STUDY_FILE_URL_PREFIXES_WHITELIST.some((whitelistPrefix) =>
-      url.startsWith(whitelistPrefix),
-    )
+    RELEASE
+      ? url !== RELEASE.studyUrl
+      : !STUDY_FILE_URL_PREFIXES_WHITELIST.some((whitelistPrefix) =>
+          url.startsWith(whitelistPrefix),
+        )
   ) {
     throw new Error(
       "This study file URL is not in the whitelist. Please refer to " +
@@ -114,6 +118,24 @@ export async function downloadStudyFileAsync({
     ),
   );
 
+  if (RELEASE) {
+    const response = await requestTextAsync(url, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        protocol: "wellping-v1",
+        credentials: { username, passwordHash },
+      }),
+    });
+    if (response.status < 200 || response.status >= 300)
+      throw new Error(
+        "Unable to load study configuration. Check your enrollment details.",
+      );
+    return response.text;
+  }
   const queryObject: { [key: string]: string } = {
     username,
     password: passwordHash,
@@ -192,6 +214,16 @@ export async function parseAndStoreStudyFileAsync(
 ): Promise<string | null> {
   try {
     const parsedStudy = StudyFileSchema.parse(JSON.parse(rawJsonString));
+    if (
+      RELEASE &&
+      (!parsedStudy.studyInfo.version?.trim() ||
+        parsedStudy.studyInfo.studyFileURL !== RELEASE.studyUrl ||
+        parsedStudy.studyInfo.server.beiwe?.serverUrl !== RELEASE.beiweUrl ||
+        isUsingFirebase(parsedStudy.studyInfo) ||
+        parsedStudy.studyInfo.contactEmail !== RELEASE.supportEmail)
+    ) {
+      throw new Error("Study configuration does not match this release.");
+    }
     const previous = await getCurrentStudyFileAsync();
     if (
       previous &&

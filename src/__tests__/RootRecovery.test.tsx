@@ -11,6 +11,9 @@ import { getTempStudyFileAsync } from "../helpers/asyncStorage/tempStudyFile";
 import { isVerifiedPendingEnrollmentAsync } from "../helpers/failedEnrollment";
 import { logoutAsync } from "../helpers/users";
 import { getVerifiedPendingLogoutAsync } from "../helpers/dataJournal";
+jest.mock("../helpers/pings", () => ({
+  getPingsAsync: jest.fn().mockResolvedValue([]),
+}));
 jest.mock("../helpers/dataJournal", () => ({
   getVerifiedPendingLogoutAsync: jest.fn().mockResolvedValue(null),
 }));

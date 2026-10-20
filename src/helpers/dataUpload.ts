@@ -1,3 +1,5 @@
+import * as Crypto from "expo-crypto";
+import { RELEASE } from "../../config/release";
 import { StudyInfo } from "@wellping/study-schemas/lib/types";
 import { beiweUploadDataForUserAsync } from "./beiwe";
 import { AllData, UnuploadedData } from "./dataUploadType";
@@ -29,13 +31,30 @@ async function payload(
     installation: await getUserInstallationInfoAsync(),
   };
   await assertDataOwnerAsync(snapshot.owner);
-  return unuploadedOnly
+  const metadata = {
+    studyId: snapshot.owner.studyId,
+    revisions: Object.fromEntries(
+      Object.entries(snapshot.revisions).map(([id, revision]) => [
+        id,
+        { revision, studyVersion: snapshot.studyVersions[id] },
+      ]),
+    ),
+  };
+  const data = unuploadedOnly
     ? {
+        ...metadata,
         user,
         unuploadedPings: snapshot.pings,
         unuploadedAnswers: snapshot.answers,
       }
-    : { user, pings: snapshot.pings, answers: snapshot.answers };
+    : { ...metadata, user, pings: snapshot.pings, answers: snapshot.answers };
+  return {
+    ...data,
+    receipt: await Crypto.digestStringAsync(
+      Crypto.CryptoDigestAlgorithm.SHA256,
+      JSON.stringify(data),
+    ),
+  };
 }
 export async function getAllDataAsync(): Promise<AllData> {
   return (await payload(await captureDataSnapshotAsync({}), false)) as AllData;
@@ -73,6 +92,13 @@ export function uploadDataAsync(
     )
       throw new Error(
         "Study destination changed; responses remain on this device.",
+      );
+    if (
+      RELEASE &&
+      Object.values(snapshot.studyVersions).some((version) => !version)
+    )
+      throw new Error(
+        "Originating study version is unknown. Responses remain saved for recovery.",
       );
     const data = await payload(snapshot, unuploadedOnly);
     setUploadStatusSymbol(HOME_SCREEN_DEBUG_VIEW_SYMBOLS.UPLOAD.UPLOADING);

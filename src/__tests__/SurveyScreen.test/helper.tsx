@@ -42,8 +42,10 @@ export function getBaseProps() {
   };
 }
 
-export async function setUpSurveyScreenTestAsync(): Promise<Ping> {
-  mockCurrentStudyInfo(STUDY_INFO);
+export async function setUpSurveyScreenTestAsync(
+  studyInfo: StudyInfo = STUDY_INFO,
+): Promise<Ping> {
+  mockCurrentStudyInfo(studyInfo);
   await secureStoreUserAsync({
     username: "synthetic-renderer",
     password: "test-only",

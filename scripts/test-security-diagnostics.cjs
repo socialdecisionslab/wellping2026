@@ -82,6 +82,11 @@ function load(file, mocks) {
   }
   let dequeued = false;
   const upload = load("src/helpers/dataUpload.ts", {
+    "expo-crypto": {
+      CryptoDigestAlgorithm: { SHA256: "SHA256" },
+      digestStringAsync: async () => "synthetic-receipt",
+    },
+    "../../config/release": { RELEASE: undefined },
     "./beiwe": {},
     "./firebase": {},
     "./dataJournal": {
@@ -90,6 +95,8 @@ function load(file, mocks) {
         user: { username: "fixture" },
         pings: [{ id: "fixture" }],
         answers: [],
+        revisions: { fixture: 1 },
+        studyVersions: { fixture: "synthetic-v1" },
       }),
       assertDataOwnerAsync: async () => {},
       acknowledgeDataSnapshotAsync: async () => {

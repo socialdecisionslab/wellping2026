@@ -21,7 +21,7 @@ The unchanged baseline typechecked. Its first full Jest run passed 256 of 257 te
 
 ## Remaining release gates
 
-1. Beiwe and authenticated study-download credential transport remains the existing query-parameter contract. A backend-supported replacement must be verified before changing it. No live backend was accessed.
+1. Guarded staging/production builds now use the proposed [Beiwe v1 contract](../release/beiwe-contract.md), with body authentication and exact receipt verification on the shared journal snapshot. Legacy development configuration retains the old transport. The new server contract remains unapproved and unverified; no live backend was accessed.
 2. Backend guarantees are not globally exactly-once. Multiple clients editing the same logical Firebase record remain last-write-wins; old clients may still create legacy duplicates. Beiwe deduplication requires a verified server contract.
 3. Legacy unowned response records and nonempty earlier follow-up queues require staff-assisted ownership recovery. Their original bytes are preserved and must not be silently assigned or discarded. A production recovery workflow is not supplied by this patch.
 4. Retained historical owner archives need an approved retention/export/deletion policy and an authorized recovery workflow. Logout is no longer an erasure operation.

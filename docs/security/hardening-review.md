@@ -1,5 +1,7 @@
 # Security hardening review
 
+Historical audit/backport context. For implemented reliability changes and outstanding release gates, see the [current release runbook](../release/deployment.md). Older tooling/profile instructions below are superseded.
+
 These client changes are a development baseline, **not production-security approval**. They port the security-only changes from PR #2 (`b3bdca5`) onto the original `cd3e808` baseline plus PRs #1 and #3. The unrelated upstream Expo 49 / app 1.1.16 history in #2 is deliberately deferred. See [PR reconciliation](../pr-reconciliation.md).
 
 ## Changes

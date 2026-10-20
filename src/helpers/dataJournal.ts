@@ -56,6 +56,7 @@ export type DataSnapshot = {
   pings: Ping[];
   answers: Answer[];
   revisions: Record<string, number>;
+  studyVersions: Record<string, string | null>;
 };
 type Context = {
   owner: DataOwner;
@@ -73,6 +74,7 @@ type Index = {
   pings: string[];
   answers: Record<string, string[]>;
   revisions: Record<string, number>;
+  studyVersions?: Record<string, string | null>;
   dirty: Record<string, number>;
   nextByStream: Record<string, number>;
   insertions: Record<string, string>;
@@ -305,7 +307,7 @@ function validateIndex(value: unknown, ownerId: string): Index {
       "nextByStream",
       "insertions",
       "expiry",
-    ]) ||
+    ], ["studyVersions"]) ||
     value.version !== 1 ||
     value.ownerId !== ownerId ||
     !isCount(value.sequence) ||
@@ -324,6 +326,17 @@ function validateIndex(value: unknown, ownerId: string): Index {
   )
     recovery("INVALID_INDEX");
   const result = value as Index;
+  // Older journal indexes have no provenance field. Preserve unknown versions
+  // instead of assigning the current questionnaire to historical responses.
+  if (
+    result.studyVersions !== undefined &&
+    (!object(result.studyVersions) ||
+      Object.entries(result.studyVersions).some(([id, version]) =>
+        !result.pings.includes(id) ||
+        !(version === null || (typeof version === "string" && version.trim().length > 0)),
+      ))
+  )
+    recovery("INVALID_STUDY_VERSIONS");
   for (const id of result.pings) {
     if (
       !own(result.answers, id) ||
@@ -842,6 +855,13 @@ async function savePing(context: Context, index: Index, ping: Ping) {
     if (JSON.stringify(previous) === JSON.stringify(ping)) return previous;
   } else {
     index.pings.push(ping.id);
+    index.studyVersions ??= {};
+    Object.defineProperty(index.studyVersions, ping.id, {
+      value: context.studyInfo.version?.trim() ? context.studyInfo.version : null,
+      enumerable: true,
+      writable: true,
+      configurable: true,
+    });
     if (!own(index.expiry, ping.id))
       Object.defineProperty(index.expiry, ping.id, {
         value: null,
@@ -1080,6 +1100,12 @@ export function captureDataSnapshotAsync({
       pings,
       answers,
       revisions,
+      studyVersions: Object.fromEntries(pings.map(({ id }) => [
+        id,
+        index.studyVersions && own(index.studyVersions, id)
+          ? index.studyVersions[id]
+          : null,
+      ])),
     };
   });
 }
@@ -1236,6 +1262,7 @@ export function removeJournalRecordsAsync({
         delete index.revisions[id];
         delete index.dirty[id];
         delete index.expiry[id];
+        if (index.studyVersions) delete index.studyVersions[id];
         for (const token of Object.keys(index.insertions))
           if (index.insertions[token] === id) delete index.insertions[token];
       } else if (changed) bump(index, id);

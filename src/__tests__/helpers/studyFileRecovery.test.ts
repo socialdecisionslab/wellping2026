@@ -164,3 +164,50 @@ test("interrupted clearing cannot resurrect the old three-part study", async () 
 afterEach(async () => {
   await clearCurrentStudyFileAsync();
 });
+
+test("reads the target's v2 envelope and writes the same compatible shape", async () => {
+  await AsyncStorage.setItem(
+    "currentStudyFile.v2",
+    JSON.stringify({ version: 2, study }),
+  );
+  const saved = await getStudyFileAsync();
+  expect(saved.studyInfo.id).toBe(study.studyInfo.id);
+  expect(await parseAndStoreStudyFileAsync(rawStudy)).toBeNull();
+  expect(
+    JSON.parse((await AsyncStorage.getItem("currentStudyFile.v2"))!),
+  ).toEqual({ version: 2, study: JSON.parse(JSON.stringify(saved)) });
+});
+test("target-written tombstones take precedence over complete legacy study records", async () => {
+  for (const [part, value] of Object.entries({
+    StudyInfo: study.studyInfo,
+    Streams: study.streams,
+    ExtraData: study.extraData,
+  }))
+    await AsyncStorage.setItem(
+      `currentStudyFile_${part}`,
+      JSON.stringify(value),
+    );
+  await AsyncStorage.setItem(
+    "currentStudyFile.v2",
+    JSON.stringify({ version: 2, study: null }),
+  );
+  expect(await studyFileExistsAsync()).toBe(false);
+  expect(
+    await AsyncStorage.getItem("currentStudyFile_StudyInfo"),
+  ).not.toBeNull();
+});
+test("read failures and incomplete legacy configurations never overwrite evidence", async () => {
+  await AsyncStorage.setItem(
+    "currentStudyFile_StudyInfo",
+    JSON.stringify(study.studyInfo),
+  );
+  await expect(getStudyFileAsync()).rejects.toThrow();
+  expect(await parseAndStoreStudyFileAsync(rawStudy)).not.toBeNull();
+  expect(await AsyncStorage.getItem("currentStudyFile.v2")).toBeNull();
+  const before = await AsyncStorage.getItem("currentStudyFile_StudyInfo");
+  jest
+    .spyOn(AsyncStorage, "getItem")
+    .mockRejectedValueOnce(Error("read failed"));
+  expect(await parseAndStoreStudyFileAsync(rawStudy)).not.toBeNull();
+  expect(await AsyncStorage.getItem("currentStudyFile_StudyInfo")).toBe(before);
+});

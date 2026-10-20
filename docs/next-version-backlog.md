@@ -1,5 +1,7 @@
 # Next-version backlog
 
+Historical audit/backport context. For implemented reliability changes and outstanding release gates, see the [current release runbook](release/deployment.md). Older tooling/profile instructions below are superseded.
+
 Preserve the study schema, survey renderer, question components, existing response encoding, and backend boundaries while introducing explicit reliability tests. Replace fragile storage/upload orchestration and obsolete build tooling incrementally. A rewrite would need the same contract and migration work with more behavioral risk.
 
 Sizes are approximate developer effort: S = 1–2 days, M = 3–5 days, L = 1–2 weeks; external access/review time excluded. “Autonomous” permits local synthetic implementation and draft review, not production changes.

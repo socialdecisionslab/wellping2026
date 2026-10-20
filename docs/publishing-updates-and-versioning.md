@@ -1,4 +1,6 @@
-# Publishing Updates & Versioning
+# Historical Publishing Updates & Versioning
+
+**Archived instructions — do not use for the December 2026 study.** Use the [current release runbook](release/deployment.md). OTA updates are disabled for this pilot; the legacy Expo publishing commands and original store/account references below are historical only.
 
 This document will discuss
 - different ways to publish updates for Well Ping;

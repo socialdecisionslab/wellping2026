@@ -1,3 +1,4 @@
+import { RELEASE } from "../../config/release";
 import * as Linking from "expo-linking";
 import * as WebBrowser from "expo-web-browser";
 import React from "react";
@@ -66,6 +67,7 @@ export default class LoginScreen extends React.Component<
   }
 
   handleUrl(url: Linking.ParsedURL) {
+    if (RELEASE) return; // Pilot builds use typed codes, not historical domains.
     if (
       url.hostname === "stanfordsocialneurosciencelab.github.io" ||
       url.hostname === "wellping.github.io"
@@ -77,7 +79,16 @@ export default class LoginScreen extends React.Component<
       ) {
         const code = url.queryParams["code"];
         if (typeof code !== "string") return;
-        const loginCode = decodeURIComponent(code);
+        let loginCode: string;
+        try {
+          loginCode = decodeURIComponent(code);
+        } catch (_) {
+          Alert.alert(
+            "Invalid enrollment link",
+            "Please enter the code provided by study staff.",
+          );
+          return;
+        }
 
         this.setState({ formData: loginCode });
         Alert.alert(
